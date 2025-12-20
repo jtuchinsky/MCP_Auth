@@ -4,9 +4,9 @@ This directory contains unit tests for individual components of the MCP Auth Ser
 
 ## Test Files
 
-### test_database.py
+### test_database.py (Step 3)
 
-Tests for database configuration and session management (Step 3).
+Tests for database configuration and session management.
 
 **Test Coverage:**
 - ✅ Base declarative class is properly defined
@@ -22,37 +22,124 @@ Tests for database configuration and session management (Step 3).
 - ✅ Base.metadata is accessible for migrations
 - ✅ Database can be inspected using SQLAlchemy inspector
 
-**Running Tests:**
+**Test Results:** 12 passed
+
+### test_security.py (Step 4)
+
+Tests for password hashing and verification using bcrypt.
+
+**Test Coverage:**
+- ✅ Password hashing returns valid string
+- ✅ Produces bcrypt hash format ($2b$)
+- ✅ Uses correct cost factor (12)
+- ✅ Same password produces different hashes (salting)
+- ✅ Different passwords produce different hashes
+- ✅ Handles special characters
+- ✅ Handles unicode characters
+- ✅ Handles empty strings
+- ✅ Verifies correct password returns True
+- ✅ Verifies incorrect password returns False
+- ✅ Verification is case-sensitive
+- ✅ Verification with special characters
+- ✅ Verification with unicode
+- ✅ Verification with empty string
+- ✅ Verification preserves whitespace
+- ✅ Invalid hash format raises exception
+- ✅ Complete hash and verify workflow
+- ✅ Multiple users with same password get different hashes
+- ✅ Password change workflow
+
+**Test Results:** 19 passed
+
+### test_exceptions.py (Step 4)
+
+Tests for custom HTTP exception classes.
+
+**Test Coverage:**
+
+**AuthenticationError (401 Unauthorized):**
+- ✅ Default message
+- ✅ Custom message
+- ✅ With headers (WWW-Authenticate)
+- ✅ Is HTTPException subclass
+- ✅ Can be raised and caught
+
+**AuthorizationError (403 Forbidden):**
+- ✅ Default message
+- ✅ Custom message
+- ✅ With headers
+- ✅ Is HTTPException subclass
+- ✅ Can be raised and caught
+
+**TOTPError (400 Bad Request):**
+- ✅ Default message
+- ✅ Custom message
+- ✅ With headers
+- ✅ Is HTTPException subclass
+- ✅ Can be raised and caught
+
+**Status Codes:**
+- ✅ Each exception has correct status code
+- ✅ All status codes are unique
+
+**Usage Scenarios:**
+- ✅ Invalid credentials scenario
+- ✅ Expired token scenario
+- ✅ Insufficient permissions scenario
+- ✅ Invalid TOTP code scenario
+- ✅ TOTP not enabled scenario
+
+**Test Results:** 24 passed
+
+## Running Tests
+
+### Run All Unit Tests
 ```bash
-# Run all database tests
-uv run pytest tests/unit/test_database.py -v
-
-# Run specific test class
-uv run pytest tests/unit/test_database.py::TestDatabaseConfiguration -v
-
-# Run specific test
-uv run pytest tests/unit/test_database.py::TestDatabaseConfiguration::test_engine_connects -v
+.venv/bin/python -m pytest tests/unit/ -v
 ```
 
-**Test Results:**
-```
-12 passed in 0.23s
-```
-
-## Running All Unit Tests
-
+### Run Specific Test Files
 ```bash
-uv run pytest tests/unit/ -v
+# Database tests
+.venv/bin/python -m pytest tests/unit/test_database.py -v
+
+# Security tests
+.venv/bin/python -m pytest tests/unit/test_security.py -v
+
+# Exception tests
+.venv/bin/python -m pytest tests/unit/test_exceptions.py -v
 ```
+
+### Run Specific Test Class
+```bash
+.venv/bin/python -m pytest tests/unit/test_security.py::TestPasswordHashing -v
+```
+
+### Run Specific Test
+```bash
+.venv/bin/python -m pytest tests/unit/test_security.py::TestPasswordHashing::test_hash_password_uses_correct_cost_factor -v
+```
+
+## Overall Test Results
+
+**Total:** 55 tests
+- test_database.py: 12 passed
+- test_security.py: 19 passed
+- test_exceptions.py: 24 passed
 
 ## Test Coverage
 
 To run tests with coverage:
 ```bash
-uv run pytest tests/unit/ --cov=app --cov-report=html
+.venv/bin/python -m pytest tests/unit/ --cov=app --cov-report=html
 ```
 
 View coverage report:
 ```bash
 open htmlcov/index.html
 ```
+
+## Notes
+
+- **bcrypt Version:** Tests require bcrypt <5.0.0 for compatibility with passlib
+- **Warning:** The deprecation warning about 'crypt' module can be safely ignored (it's from passlib, not our code)
