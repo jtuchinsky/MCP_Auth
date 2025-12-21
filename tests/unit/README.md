@@ -196,14 +196,52 @@ Tests for user repository data access layer.
 
 **Test Results:** 21 passed
 
+### test_token_repository.py (Step 8)
+
+Tests for token repository data access layer.
+
+**Test Coverage:**
+
+**Create Refresh Token:**
+- ✅ Create refresh token successfully
+- ✅ Create with OAuth2 fields (client_id, scope)
+- ✅ Created token is persisted to database
+- ✅ Create multiple tokens for same user
+
+**Get Token by String:**
+- ✅ Get existing token
+- ✅ Get nonexistent token returns None
+- ✅ Token lookup is case-sensitive
+- ✅ Get token with empty string returns None
+
+**Revoke Token:**
+- ✅ Revoke token successfully
+- ✅ Token revocation persists to database
+- ✅ Revoke nonexistent token raises ValueError
+- ✅ Revoke is idempotent
+
+**Revoke All User Tokens:**
+- ✅ Revoke all tokens for a user
+- ✅ Revoking one user's tokens doesn't affect other users
+- ✅ Revoke with no tokens doesn't error
+- ✅ Revoke for nonexistent user doesn't error
+
+**Integration Tests:**
+- ✅ Complete token lifecycle (create, retrieve, revoke)
+- ✅ User logout scenario (revoke all tokens)
+- ✅ Token refresh scenario (revoke old, create new)
+
+**Test Results:** 19 passed
+
 ## Overall Test Results
 
-**Total:** 97 tests
+**Total:** 116 tests
 - test_database.py: 12 passed
 - test_security.py: 19 passed
 - test_exceptions.py: 24 passed
 - test_models.py: 21 passed
 - test_user_repository.py: 21 passed
+- test_token_repository.py: 19 passed
 
 ## Test Coverage
 
