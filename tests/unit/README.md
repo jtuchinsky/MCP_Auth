@@ -120,12 +120,48 @@ Tests for custom HTTP exception classes.
 .venv/bin/python -m pytest tests/unit/test_security.py::TestPasswordHashing::test_hash_password_uses_correct_cost_factor -v
 ```
 
+### test_models.py (Step 5)
+
+Tests for database models (User and RefreshToken).
+
+**Test Coverage:**
+
+**User Model:**
+- ✅ Users table exists
+- ✅ All required columns present
+- ✅ Email has unique constraint
+- ✅ Create user with required fields
+- ✅ Default values (is_totp_enabled=False, is_active=True)
+- ✅ User with TOTP enabled
+- ✅ updated_at timestamp changes on modification
+- ✅ __repr__ method works correctly
+- ✅ Relationship with refresh tokens
+
+**RefreshToken Model:**
+- ✅ Refresh_tokens table exists
+- ✅ All required columns present
+- ✅ Token has unique constraint
+- ✅ Create refresh token with required fields
+- ✅ Default values (is_revoked=False)
+- ✅ Token with OAuth2 fields (client_id, scope)
+- ✅ Token revocation
+- ✅ __repr__ method works correctly
+- ✅ Foreign key to User table
+- ✅ Cascade delete (deleting user deletes tokens)
+
+**Model Relationships:**
+- ✅ Access tokens from user (User.refresh_tokens)
+- ✅ Access user from token (RefreshToken.user)
+
+**Test Results:** 21 passed
+
 ## Overall Test Results
 
-**Total:** 55 tests
+**Total:** 76 tests
 - test_database.py: 12 passed
 - test_security.py: 19 passed
 - test_exceptions.py: 24 passed
+- test_models.py: 21 passed
 
 ## Test Coverage
 
