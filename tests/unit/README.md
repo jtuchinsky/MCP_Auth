@@ -320,9 +320,50 @@ Tests for TOTP service (two-factor authentication).
 
 **Test Results:** 28 passed
 
+### test_auth_service.py (Step 11)
+
+Tests for authentication service (high-level orchestration).
+
+**Test Coverage:**
+
+**Register User:**
+- ✅ Register user successfully
+- ✅ Password is hashed during registration
+- ✅ Duplicate email raises error
+- ✅ User is persisted to database
+
+**Authenticate User:**
+- ✅ Authenticate with correct credentials
+- ✅ Wrong email raises AuthenticationError
+- ✅ Wrong password raises AuthenticationError
+- ✅ Inactive account raises AuthenticationError
+- ✅ Email authentication case sensitivity
+
+**Create Tokens:**
+- ✅ Create tokens with basic parameters
+- ✅ Create tokens with OAuth2 client_id and scope
+- ✅ Refresh token is stored in database
+- ✅ Access token is JWT format
+- ✅ Create multiple tokens for same user
+
+**Refresh Access Token:**
+- ✅ Refresh token successfully
+- ✅ Invalid refresh token raises error
+- ✅ Revoked refresh token raises error
+- ✅ Expired refresh token raises error
+- ✅ Inactive user refresh raises error
+- ✅ Refresh preserves client_id and scope
+
+**Integration Tests:**
+- ✅ Complete registration and login workflow
+- ✅ Token refresh workflow
+- ✅ Multiple users don't interfere
+
+**Test Results:** 23 passed
+
 ## Overall Test Results
 
-**Total:** 169 tests
+**Total:** 192 tests
 - test_database.py: 12 passed
 - test_security.py: 19 passed
 - test_exceptions.py: 24 passed
@@ -331,6 +372,7 @@ Tests for TOTP service (two-factor authentication).
 - test_token_repository.py: 19 passed
 - test_jwt_service.py: 25 passed
 - test_totp_service.py: 28 passed
+- test_auth_service.py: 23 passed
 
 ## Test Coverage
 
