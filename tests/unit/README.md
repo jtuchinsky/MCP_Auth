@@ -155,13 +155,55 @@ Tests for database models (User and RefreshToken).
 
 **Test Results:** 21 passed
 
+### test_user_repository.py (Step 7)
+
+Tests for user repository data access layer.
+
+**Test Coverage:**
+
+**Create User:**
+- ✅ Create user with required fields successfully
+- ✅ Created user is persisted to database
+- ✅ Create multiple users with different IDs
+
+**Get User by ID:**
+- ✅ Get existing user by ID
+- ✅ Get nonexistent user returns None
+- ✅ Get user with ID 0 returns None
+- ✅ Get user with negative ID returns None
+
+**Get User by Email:**
+- ✅ Get existing user by email
+- ✅ Get nonexistent user returns None
+- ✅ Email lookup case sensitivity
+- ✅ Get user with empty email returns None
+
+**Update TOTP Secret:**
+- ✅ Update TOTP secret successfully
+- ✅ TOTP secret update persists to database
+- ✅ Update for nonexistent user raises ValueError
+- ✅ Update TOTP secret multiple times
+
+**Enable TOTP:**
+- ✅ Enable TOTP successfully
+- ✅ Enable TOTP persists to database
+- ✅ Enable for nonexistent user raises ValueError
+- ✅ Enable TOTP is idempotent
+
+**Integration Tests:**
+- ✅ Complete user workflow (create, retrieve, update TOTP, enable TOTP)
+- ✅ Operations on one user don't affect others
+
+**Test Results:** 21 passed
+
 ## Overall Test Results
 
-**Total:** 76 tests
+**Total:** 97 tests
 - test_database.py: 12 passed
 - test_security.py: 19 passed
 - test_exceptions.py: 24 passed
 - test_models.py: 21 passed
+- test_user_repository.py: 21 passed
 
 ## Test Coverage
 
