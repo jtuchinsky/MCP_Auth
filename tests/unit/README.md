@@ -233,15 +233,57 @@ Tests for token repository data access layer.
 
 **Test Results:** 19 passed
 
+### test_jwt_service.py (Step 9)
+
+Tests for JWT service (token creation and validation).
+
+**Test Coverage:**
+
+**Create Access Token:**
+- ✅ Create basic access token
+- ✅ Token payload has correct structure (sub, email, exp, iat, scopes)
+- ✅ Create token with OAuth2 scopes
+- ✅ Create token with OAuth2 audience
+- ✅ Token has correct expiration time
+- ✅ Token is signed with HS256 algorithm
+- ✅ Created token can be successfully decoded
+- ✅ Tokens for different users have different payloads
+
+**Create Refresh Token:**
+- ✅ Refresh token returns string
+- ✅ Refresh token is URL-safe
+- ✅ Refresh tokens are randomly generated
+- ✅ Refresh token has sufficient length (32 bytes)
+- ✅ Multiple refresh tokens are all unique
+
+**Decode Access Token:**
+- ✅ Decode valid access token
+- ✅ Decode token with scopes
+- ✅ Decode token with audience
+- ✅ Decoding expired token raises AuthenticationError
+- ✅ Decoding token with invalid signature raises error
+- ✅ Decoding malformed token raises error
+- ✅ Decoding empty string raises error
+- ✅ Decoding token with wrong algorithm raises error
+
+**Integration Tests:**
+- ✅ Complete create and decode workflow
+- ✅ Refresh token format differs from access token
+- ✅ Multiple users workflow
+- ✅ Token expiration is enforced
+
+**Test Results:** 25 passed
+
 ## Overall Test Results
 
-**Total:** 116 tests
+**Total:** 141 tests
 - test_database.py: 12 passed
 - test_security.py: 19 passed
 - test_exceptions.py: 24 passed
 - test_models.py: 21 passed
 - test_user_repository.py: 21 passed
 - test_token_repository.py: 19 passed
+- test_jwt_service.py: 25 passed
 
 ## Test Coverage
 
