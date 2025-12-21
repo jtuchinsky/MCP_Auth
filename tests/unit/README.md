@@ -274,9 +274,55 @@ Tests for JWT service (token creation and validation).
 
 **Test Results:** 25 passed
 
+### test_totp_service.py (Step 10)
+
+Tests for TOTP service (two-factor authentication).
+
+**Test Coverage:**
+
+**Generate Secret:**
+- ✅ Generate secret returns string
+- ✅ Secret is base32-encoded
+- ✅ Secret has correct length (32 characters)
+- ✅ Secrets are randomly generated
+- ✅ Multiple secrets are all unique
+- ✅ Generated secret can create TOTP
+
+**Get Provisioning URI:**
+- ✅ URI has correct otpauth format
+- ✅ URI contains user's email (URL-encoded)
+- ✅ URI contains secret
+- ✅ URI contains issuer name
+- ✅ Different emails produce different URIs
+
+**Generate QR Code:**
+- ✅ QR code returns string
+- ✅ QR code is base64-encoded
+- ✅ QR code is PNG image
+- ✅ Different URIs produce different QR codes
+- ✅ Generate QR code from provisioning URI
+
+**Verify Code:**
+- ✅ Verify valid TOTP code
+- ✅ Verify invalid code returns False
+- ✅ Verify code with wrong secret returns False
+- ✅ Verify empty code returns False
+- ✅ Verify short code returns False
+- ✅ Verify long code returns False
+- ✅ Verify non-numeric code returns False
+- ✅ Verify code with spaces
+
+**Integration Tests:**
+- ✅ Complete TOTP setup workflow (generate, URI, QR, verify)
+- ✅ Multiple users workflow
+- ✅ TOTP code time validity
+- ✅ Generated secret works with authenticator apps
+
+**Test Results:** 28 passed
+
 ## Overall Test Results
 
-**Total:** 141 tests
+**Total:** 169 tests
 - test_database.py: 12 passed
 - test_security.py: 19 passed
 - test_exceptions.py: 24 passed
@@ -284,6 +330,7 @@ Tests for JWT service (token creation and validation).
 - test_user_repository.py: 21 passed
 - test_token_repository.py: 19 passed
 - test_jwt_service.py: 25 passed
+- test_totp_service.py: 28 passed
 
 ## Test Coverage
 
