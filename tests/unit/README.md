@@ -361,9 +361,62 @@ Tests for authentication service (high-level orchestration).
 
 **Test Results:** 23 passed
 
+### test_oauth2_service.py (Step 12)
+
+Tests for OAuth2 authorization server metadata (RFC 8414).
+
+**Test Coverage:**
+
+**Metadata Structure:**
+- ✅ Has all RFC 8414 required fields
+- ✅ Issuer matches base URL
+- ✅ All endpoints use base URL
+- ✅ Endpoint URLs have correct paths
+- ✅ Metadata is valid dictionary
+- ✅ All values are JSON serializable
+
+**OAuth 2.1 Compliance:**
+- ✅ Supports PKCE (S256 code challenge method)
+- ✅ Supports authorization code flow
+- ✅ Supports refresh token grant
+- ✅ No implicit flow (OAuth 2.1 requirement)
+- ✅ No password grant (OAuth 2.1 requirement)
+
+**Client Authentication:**
+- ✅ Supports client_secret_post
+- ✅ Supports client_secret_basic
+- ✅ Supports public clients (none)
+
+**Scopes and Features:**
+- ✅ Supports OpenID Connect scopes (openid, profile, email)
+- ✅ Supports MCP scopes (mcp:read, mcp:write)
+- ✅ Supports resource indicators (RFC 8707)
+- ✅ Includes MCP-specific features
+
+**Endpoints:**
+- ✅ Authorization endpoint
+- ✅ Token endpoint
+- ✅ JWKS URI
+- ✅ Revocation endpoint
+- ✅ Service documentation
+
+**URL Handling:**
+- ✅ Works with different base URLs
+- ✅ Handles URLs without trailing slash
+- ✅ Handles URLs with trailing slash
+
+**Integration Tests:**
+- ✅ Full OAuth 2.1 compliance verification
+- ✅ Full MCP compliance verification
+- ✅ Complete endpoint set
+- ✅ Local development configuration
+- ✅ Production configuration
+
+**Test Results:** 23 passed
+
 ## Overall Test Results
 
-**Total:** 192 tests
+**Total:** 215 tests
 - test_database.py: 12 passed
 - test_security.py: 19 passed
 - test_exceptions.py: 24 passed
@@ -373,6 +426,7 @@ Tests for authentication service (high-level orchestration).
 - test_jwt_service.py: 25 passed
 - test_totp_service.py: 28 passed
 - test_auth_service.py: 23 passed
+- test_oauth2_service.py: 23 passed
 
 ## Test Coverage
 
