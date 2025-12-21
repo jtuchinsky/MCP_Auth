@@ -414,9 +414,55 @@ Tests for OAuth2 authorization server metadata (RFC 8414).
 
 **Test Results:** 23 passed
 
+### test_user_schemas.py (Step 13)
+
+Tests for user Pydantic schemas (API request/response models).
+
+**Test Coverage:**
+
+**UserCreate Schema:**
+- ✅ Valid data creates schema
+- ✅ Various valid email formats
+- ✅ Invalid email raises ValidationError
+- ✅ Password minimum length (8 chars)
+- ✅ Password maximum length (100 chars)
+- ✅ Missing email raises ValidationError
+- ✅ Missing password raises ValidationError
+- ✅ Empty password is invalid
+- ✅ Special characters and Unicode in password
+- ✅ Serialization to dict (model_dump)
+- ✅ Serialization to JSON (model_dump_json)
+
+**UserResponse Schema:**
+- ✅ Valid data creates schema
+- ✅ Create from ORM User model (model_validate)
+- ✅ Missing required fields raise ValidationError
+- ✅ Boolean fields validation
+- ✅ Datetime fields handling
+- ✅ Serialization to dict
+- ✅ Serialization to JSON
+- ✅ Password hash not included in response
+
+**UserUpdate Schema:**
+- ✅ Update with all fields
+- ✅ Partial updates (only some fields)
+- ✅ No fields provided (all optional)
+- ✅ Email validation
+- ✅ Password minimum length
+- ✅ Password maximum length
+- ✅ Exclude unset fields
+- ✅ Serialization to dict
+
+**Integration Tests:**
+- ✅ Complete user creation workflow
+- ✅ User update workflow with partial data
+- ✅ All schemas are JSON serializable
+
+**Test Results:** 29 passed
+
 ## Overall Test Results
 
-**Total:** 215 tests
+**Total:** 244 tests
 - test_database.py: 12 passed
 - test_security.py: 19 passed
 - test_exceptions.py: 24 passed
@@ -427,6 +473,7 @@ Tests for OAuth2 authorization server metadata (RFC 8414).
 - test_totp_service.py: 28 passed
 - test_auth_service.py: 23 passed
 - test_oauth2_service.py: 23 passed
+- test_user_schemas.py: 29 passed
 
 ## Test Coverage
 

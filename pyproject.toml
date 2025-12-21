@@ -16,6 +16,7 @@ dependencies = [
     "pyotp>=2.9.0",
     "qrcode[pil]>=8.0",
     "python-dotenv>=1.0.1",
+    "email-validator>=2.0.0",
 ]
 
 [project.optional-dependencies]
