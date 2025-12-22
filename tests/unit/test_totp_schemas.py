@@ -202,53 +202,94 @@ class TestTOTPValidateRequest:
     """Test TOTPValidateRequest schema."""
 
     def test_totp_validate_request_valid(self):
-        """Test creating TOTPValidateRequest with valid code."""
-        data = {"totp_code": "987654"}
+        """Test creating TOTPValidateRequest with valid data."""
+        data = {
+            "email": "user@example.com",
+            "password": "password123",
+            "totp_code": "987654",
+        }
         request = TOTPValidateRequest(**data)
 
+        assert request.email == "user@example.com"
+        assert request.password == "password123"
         assert request.totp_code == "987654"
+
+    def test_totp_validate_request_missing_email(self):
+        """Test that email is required."""
+        with pytest.raises(ValidationError):
+            TOTPValidateRequest(password="password123", totp_code="123456")
+
+    def test_totp_validate_request_missing_password(self):
+        """Test that password is required."""
+        with pytest.raises(ValidationError):
+            TOTPValidateRequest(email="user@example.com", totp_code="123456")
 
     def test_totp_validate_request_missing_code(self):
         """Test that totp_code is required."""
         with pytest.raises(ValidationError):
-            TOTPValidateRequest()
+            TOTPValidateRequest(email="user@example.com", password="password123")
+
+    def test_totp_validate_request_invalid_email(self):
+        """Test that email must be valid."""
+        with pytest.raises(ValidationError):
+            TOTPValidateRequest(
+                email="not-an-email", password="password123", totp_code="123456"
+            )
 
     def test_totp_validate_request_code_length(self):
         """Test TOTP code must be exactly 6 digits."""
         # Valid 6-digit code
-        request = TOTPValidateRequest(totp_code="111111")
+        request = TOTPValidateRequest(
+            email="user@example.com", password="password123", totp_code="111111"
+        )
         assert request.totp_code == "111111"
 
         # Too short
         with pytest.raises(ValidationError):
-            TOTPValidateRequest(totp_code="12345")
+            TOTPValidateRequest(
+                email="user@example.com", password="password123", totp_code="12345"
+            )
 
         # Too long
         with pytest.raises(ValidationError):
-            TOTPValidateRequest(totp_code="1234567")
+            TOTPValidateRequest(
+                email="user@example.com", password="password123", totp_code="1234567"
+            )
 
     def test_totp_validate_request_code_digits_only(self):
         """Test TOTP code must be digits only."""
         # Valid digits
-        request = TOTPValidateRequest(totp_code="456789")
+        request = TOTPValidateRequest(
+            email="user@example.com", password="password123", totp_code="456789"
+        )
         assert request.totp_code == "456789"
 
         # Contains non-digits
         with pytest.raises(ValidationError):
-            TOTPValidateRequest(totp_code="abcdef")
+            TOTPValidateRequest(
+                email="user@example.com", password="password123", totp_code="abcdef"
+            )
 
     def test_totp_validate_request_model_dump(self):
         """Test serializing TOTPValidateRequest to dict."""
-        request = TOTPValidateRequest(totp_code="246810")
+        request = TOTPValidateRequest(
+            email="user@example.com", password="password123", totp_code="246810"
+        )
         data = request.model_dump()
 
+        assert data["email"] == "user@example.com"
+        assert data["password"] == "password123"
         assert data["totp_code"] == "246810"
 
     def test_totp_validate_request_model_dump_json(self):
         """Test serializing TOTPValidateRequest to JSON."""
-        request = TOTPValidateRequest(totp_code="135790")
+        request = TOTPValidateRequest(
+            email="user@example.com", password="password123", totp_code="135790"
+        )
         json_str = request.model_dump_json()
 
+        assert "user@example.com" in json_str
+        assert "password123" in json_str
         assert "135790" in json_str
 
 
@@ -275,16 +316,19 @@ class TestTOTPSchemasIntegration:
         assert verify_request.totp_code == "123456"
         assert len(verify_request.totp_code) == 6
 
-    def test_totp_verify_and_validate_same_structure(self):
-        """Test that verify and validate requests have same structure."""
-        # Both should accept the same data
-        code = "123456"
+    def test_totp_verify_and_validate_different_purpose(self):
+        """Test that verify and validate have different purposes."""
+        # Verify is for setup (just code)
+        verify = TOTPVerifyRequest(totp_code="123456")
+        assert verify.totp_code == "123456"
 
-        verify = TOTPVerifyRequest(totp_code=code)
-        validate = TOTPValidateRequest(totp_code=code)
-
-        assert verify.totp_code == validate.totp_code
-        assert verify.model_dump() == validate.model_dump()
+        # Validate is for login (email, password, code)
+        validate = TOTPValidateRequest(
+            email="user@example.com", password="password123", totp_code="123456"
+        )
+        assert validate.totp_code == "123456"
+        assert validate.email == "user@example.com"
+        assert validate.password == "password123"
 
     def test_all_schemas_json_serializable(self):
         """Test that all TOTP schemas are JSON serializable."""
@@ -303,7 +347,9 @@ class TestTOTPSchemasIntegration:
         json.loads(verify.model_dump_json())
 
         # TOTPValidateRequest
-        validate = TOTPValidateRequest(totp_code="654321")
+        validate = TOTPValidateRequest(
+            email="user@example.com", password="password123", totp_code="654321"
+        )
         json.loads(validate.model_dump_json())
 
     def test_totp_enable_workflow(self):
@@ -328,9 +374,13 @@ class TestTOTPSchemasIntegration:
 
     def test_totp_login_workflow(self):
         """Test TOTP validation during login."""
-        # During login, user provides TOTP code
-        validate_request = TOTPValidateRequest(totp_code="789012")
+        # During login, user provides email, password, and TOTP code
+        validate_request = TOTPValidateRequest(
+            email="user@example.com", password="password123", totp_code="789012"
+        )
 
+        assert validate_request.email == "user@example.com"
+        assert validate_request.password == "password123"
         assert validate_request.totp_code == "789012"
         assert len(validate_request.totp_code) == 6
 
@@ -342,6 +392,8 @@ class TestTOTPSchemasIntegration:
         assert isinstance(verify.totp_code, str)
 
         # Verify it's not converted to integer
-        validate = TOTPValidateRequest(totp_code="001234")
+        validate = TOTPValidateRequest(
+            email="user@example.com", password="password123", totp_code="001234"
+        )
         assert validate.totp_code == "001234"
         assert validate.totp_code != "1234"

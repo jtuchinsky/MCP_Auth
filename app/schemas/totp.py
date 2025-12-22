@@ -1,6 +1,6 @@
 """TOTP schemas for API requests and responses."""
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class TOTPSetupResponse(BaseModel):
@@ -44,8 +44,10 @@ class TOTPVerifyRequest(BaseModel):
 
 
 class TOTPValidateRequest(BaseModel):
-    """Schema for TOTP validation request (alias for verify)."""
+    """Schema for TOTP validation request during login."""
 
+    email: EmailStr = Field(..., description="User's email address")
+    password: str = Field(..., description="User's password")
     totp_code: str = Field(
         ...,
         min_length=6,
@@ -57,6 +59,8 @@ class TOTPValidateRequest(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
+                "email": "user@example.com",
+                "password": "password123",
                 "totp_code": "654321",
             }
         }
