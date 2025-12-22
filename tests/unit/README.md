@@ -507,9 +507,54 @@ Tests for authentication Pydantic schemas (login, tokens, refresh).
 
 **Test Results:** 31 passed
 
+### test_totp_schemas.py (Step 15)
+
+Tests for TOTP Pydantic schemas (2FA setup, verification, validation).
+
+**Test Coverage:**
+
+**TOTPSetupResponse Schema:**
+- ✅ Valid TOTP setup response
+- ✅ Missing secret raises ValidationError
+- ✅ Missing provisioning_uri raises ValidationError
+- ✅ Missing qr_code raises ValidationError
+- ✅ Various secret formats accepted
+- ✅ Empty strings allowed (server-side validation)
+- ✅ Provisioning URI format validation
+- ✅ QR code with base64 data
+- ✅ Serialization to dict (model_dump)
+- ✅ Serialization to JSON (model_dump_json)
+
+**TOTPVerifyRequest Schema:**
+- ✅ Valid TOTP verification request
+- ✅ Missing totp_code raises ValidationError
+- ✅ TOTP code length validation (exactly 6 digits)
+- ✅ TOTP code digits-only validation
+- ✅ Empty code is invalid
+- ✅ Serialization to dict
+- ✅ Serialization to JSON
+
+**TOTPValidateRequest Schema:**
+- ✅ Valid TOTP validation request
+- ✅ Missing totp_code raises ValidationError
+- ✅ TOTP code length validation (exactly 6 digits)
+- ✅ TOTP code digits-only validation
+- ✅ Serialization to dict
+- ✅ Serialization to JSON
+
+**Integration Tests:**
+- ✅ Complete TOTP setup workflow
+- ✅ Verify and validate have same structure
+- ✅ All schemas are JSON serializable
+- ✅ TOTP enable workflow
+- ✅ TOTP login workflow
+- ✅ TOTP codes preserve leading zeros (string type)
+
+**Test Results:** 29 passed
+
 ## Overall Test Results
 
-**Total:** 275 tests
+**Total:** 304 tests
 - test_database.py: 12 passed
 - test_security.py: 19 passed
 - test_exceptions.py: 24 passed
@@ -522,6 +567,7 @@ Tests for authentication Pydantic schemas (login, tokens, refresh).
 - test_oauth2_service.py: 23 passed
 - test_user_schemas.py: 29 passed
 - test_auth_schemas.py: 31 passed
+- test_totp_schemas.py: 29 passed
 
 ## Test Coverage
 
