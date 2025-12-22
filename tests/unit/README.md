@@ -552,9 +552,41 @@ Tests for TOTP Pydantic schemas (2FA setup, verification, validation).
 
 **Test Results:** 29 passed
 
+### test_dependencies.py (Step 16)
+
+Tests for FastAPI dependencies (authentication, authorization).
+
+**Test Coverage:**
+
+**get_current_user Dependency:**
+- ✅ Valid JWT token authentication
+- ✅ Missing 'Bearer ' prefix raises error
+- ✅ Invalid token format raises error
+- ✅ Expired token raises error
+- ✅ Token without 'sub' claim raises error
+- ✅ Nonexistent user raises error
+- ✅ Inactive account raises error
+- ✅ Empty authorization header raises error
+- ✅ 'Bearer ' only (no token) raises error
+- ✅ Case-sensitive 'Bearer' (lowercase fails)
+- ✅ TOTP-enabled user can authenticate with token
+
+**require_totp_disabled Dependency:**
+- ✅ User without TOTP passes check
+- ✅ User with TOTP enabled raises TOTPError
+- ✅ Returns user object on success
+
+**Integration Tests:**
+- ✅ Dependency chain: get_current_user -> require_totp_disabled
+- ✅ Chain fails when TOTP is enabled
+- ✅ Multiple requests with same user token
+- ✅ Different users with different tokens
+
+**Test Results:** 18 passed
+
 ## Overall Test Results
 
-**Total:** 304 tests
+**Total:** 322 tests
 - test_database.py: 12 passed
 - test_security.py: 19 passed
 - test_exceptions.py: 24 passed
@@ -568,6 +600,7 @@ Tests for TOTP Pydantic schemas (2FA setup, verification, validation).
 - test_user_schemas.py: 29 passed
 - test_auth_schemas.py: 31 passed
 - test_totp_schemas.py: 29 passed
+- test_dependencies.py: 18 passed
 
 ## Test Coverage
 
