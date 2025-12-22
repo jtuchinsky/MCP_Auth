@@ -460,9 +460,56 @@ Tests for user Pydantic schemas (API request/response models).
 
 **Test Results:** 29 passed
 
+### test_auth_schemas.py (Step 14)
+
+Tests for authentication Pydantic schemas (login, tokens, refresh).
+
+**Test Coverage:**
+
+**LoginRequest Schema:**
+- ✅ Valid login without TOTP code
+- ✅ Valid login with TOTP code
+- ✅ Various valid email formats
+- ✅ Invalid email raises ValidationError
+- ✅ Missing email raises ValidationError
+- ✅ Missing password raises ValidationError
+- ✅ TOTP code length validation (exactly 6 digits)
+- ✅ TOTP code digits-only validation
+- ✅ Empty password allowed (server-side validation)
+- ✅ Serialization to dict (model_dump)
+- ✅ Serialization to JSON (model_dump_json)
+
+**TokenResponse Schema:**
+- ✅ Valid token response
+- ✅ Default token_type is 'bearer'
+- ✅ Missing access_token raises ValidationError
+- ✅ Missing refresh_token raises ValidationError
+- ✅ Missing expires_in raises ValidationError
+- ✅ expires_in accepts various numeric types
+- ✅ Custom token_type allowed
+- ✅ Serialization to dict
+- ✅ Serialization to JSON
+
+**RefreshRequest Schema:**
+- ✅ Valid refresh request
+- ✅ Missing refresh_token raises ValidationError
+- ✅ Empty refresh_token allowed (server-side validation)
+- ✅ Various token formats accepted
+- ✅ Serialization to dict
+- ✅ Serialization to JSON
+
+**Integration Tests:**
+- ✅ Complete login to token workflow
+- ✅ Token refresh workflow
+- ✅ All schemas are JSON serializable
+- ✅ Login without 2FA (totp_code is None)
+- ✅ Login with 2FA (totp_code provided)
+
+**Test Results:** 31 passed
+
 ## Overall Test Results
 
-**Total:** 244 tests
+**Total:** 275 tests
 - test_database.py: 12 passed
 - test_security.py: 19 passed
 - test_exceptions.py: 24 passed
@@ -474,6 +521,7 @@ Tests for user Pydantic schemas (API request/response models).
 - test_auth_service.py: 23 passed
 - test_oauth2_service.py: 23 passed
 - test_user_schemas.py: 29 passed
+- test_auth_schemas.py: 31 passed
 
 ## Test Coverage
 
