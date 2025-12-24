@@ -6,17 +6,19 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import Base, get_db
+from app.models.token import RefreshToken  # noqa: F401 - Import to register with Base
 from app.models.user import User
 from app.services import auth_service, jwt_service, totp_service
 from main import app
 
-# Test database configuration (in-memory SQLite)
-SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///:memory:"
+# Test database configuration (file-based SQLite for integration tests)
+SQLALCHEMY_TEST_DATABASE_URL = "sqlite:///./test_integration.db"
 
 # Create test engine
 test_engine = create_engine(
     SQLALCHEMY_TEST_DATABASE_URL,
     connect_args={"check_same_thread": False},
+    echo=False,
 )
 
 # Create test session factory
@@ -64,11 +66,12 @@ def db_session(test_db):
 
 
 @pytest.fixture(scope="function")
-def client(db_session: Session):
+def client(test_db, db_session: Session):
     """
     Provide a FastAPI test client with database override.
 
     Args:
+        test_db: Test database fixture (ensures tables are created)
         db_session: Test database session
 
     Yields:

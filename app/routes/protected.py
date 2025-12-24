@@ -1,11 +1,13 @@
 """Protected routes requiring authentication."""
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core import security
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
+from app.repositories import user_repository
 from app.schemas.user import UserResponse, UserUpdate
 
 router = APIRouter(prefix="/api/protected", tags=["Protected"])
@@ -60,27 +62,35 @@ async def update_profile(
     """
     Update current user's profile.
 
-    This is a placeholder endpoint for future profile update functionality.
-    Currently returns the user without making any changes.
+    Allows updating email and/or password. Email must be unique.
 
     Args:
-        profile_data: Profile update data (email, password, is_active)
+        profile_data: Profile update data (email, password)
         user: Current authenticated user (injected by dependency)
         db: Database session
 
     Returns:
         UserResponse with updated user data
 
-    Note:
-        This is a placeholder implementation. Full profile update logic
-        should be implemented in a future iteration.
+    Raises:
+        HTTPException 400: If email already exists
     """
-    # TODO: Implement profile update logic
-    # For now, just return the current user
-    # Future implementation should:
-    # - Validate email uniqueness if email is being changed
-    # - Hash password if password is being changed
-    # - Update user fields in database
-    # - Handle is_active changes appropriately
+    # Hash password if provided
+    password_hash = None
+    if profile_data.password is not None:
+        password_hash = security.hash_password(profile_data.password)
 
-    return UserResponse.model_validate(user)
+    try:
+        # Update user profile
+        updated_user = user_repository.update_profile(
+            db=db,
+            user_id=user.id,
+            email=profile_data.email,
+            password_hash=password_hash,
+        )
+        return UserResponse.model_validate(updated_user)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )

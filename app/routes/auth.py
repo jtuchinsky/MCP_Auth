@@ -165,7 +165,7 @@ async def refresh(
     "/logout",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Logout and revoke refresh token",
-    description="Revoke the provided refresh token.",
+    description="Revoke the provided refresh token. Idempotent operation - succeeds even if token doesn't exist.",
 )
 async def logout(
     refresh_data: RefreshRequest,
@@ -174,14 +174,18 @@ async def logout(
     """
     Logout user by revoking refresh token.
 
+    This is an idempotent operation - it will succeed even if the
+    token doesn't exist or is already revoked.
+
     Args:
         refresh_data: Refresh token to revoke
         db: Database session
-
-    Raises:
-        HTTPException 404: If refresh token not found
     """
-    token_repository.revoke_token(db=db, token=refresh_data.refresh_token)
+    try:
+        token_repository.revoke_token(db=db, token=refresh_data.refresh_token)
+    except ValueError:
+        # Token not found - this is fine, logout is idempotent
+        pass
 
 
 @router.post(

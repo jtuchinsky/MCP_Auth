@@ -127,3 +127,50 @@ def enable_totp(db: Session, user_id: int) -> User:
     db.commit()
     db.refresh(user)
     return user
+
+
+def update_profile(
+    db: Session,
+    user_id: int,
+    email: str | None = None,
+    password_hash: str | None = None,
+) -> User:
+    """
+    Update a user's profile information.
+
+    Args:
+        db: Database session
+        user_id: User's ID
+        email: New email address (optional)
+        password_hash: New hashed password (optional)
+
+    Returns:
+        Updated User instance
+
+    Raises:
+        ValueError: If user not found or email already exists
+
+    Example:
+        >>> user = update_profile(db, 1, email="newemail@example.com")
+        >>> print(user.email)
+        newemail@example.com
+    """
+    user = get_by_id(db, user_id)
+    if not user:
+        raise ValueError(f"User with id {user_id} not found")
+
+    # Update email if provided
+    if email is not None:
+        # Check if email is already taken by another user
+        existing_user = get_by_email(db, email)
+        if existing_user and existing_user.id != user_id:
+            raise ValueError(f"User with email {email} already exists")
+        user.email = email
+
+    # Update password if provided
+    if password_hash is not None:
+        user.password_hash = password_hash
+
+    db.commit()
+    db.refresh(user)
+    return user

@@ -85,6 +85,28 @@ def generate_qr_code(uri: str) -> str:
     return img_base64
 
 
+def generate_code(secret: str) -> str:
+    """
+    Generate a current TOTP code for testing purposes.
+
+    Args:
+        secret: Base32-encoded TOTP secret
+
+    Returns:
+        6-digit TOTP code as string
+
+    Example:
+        >>> secret = "JBSWY3DPEHPK3PXP"
+        >>> code = generate_code(secret)
+        >>> print(len(code) == 6)
+        True
+        >>> print(code.isdigit())
+        True
+    """
+    totp = pyotp.TOTP(secret)
+    return totp.now()
+
+
 def verify_code(secret: str, code: str) -> bool:
     """
     Verify a TOTP code.
