@@ -46,6 +46,20 @@ uv sync --extra dev
 pip install -e ".[dev]"
 ```
 
+**This will create a `.venv` directory with all dependencies installed.**
+
+### Verify Installation
+
+```bash
+# Check Python version in venv
+.venv/bin/python --version
+
+# Expected output: Python 3.12.x or higher
+
+# Verify key packages are installed
+.venv/bin/python -c "import fastapi, sqlalchemy, bcrypt; print('✓ Dependencies installed correctly')"
+```
+
 ## 3. Set Up Database
 
 ### Run Database Migrations
@@ -75,7 +89,9 @@ sqlite3 mcp_auth.db ".tables"
 
 ## 4. Start the Server
 
-### Activate Virtual Environment (Optional)
+### Activate Virtual Environment (Recommended)
+
+**Important:** Always activate the virtual environment to ensure you're using the correct Python and dependencies.
 
 ```bash
 # On macOS/Linux
@@ -83,6 +99,14 @@ source .venv/bin/activate
 
 # On Windows
 .venv\Scripts\activate
+```
+
+**You'll know it's activated when you see `(.venv)` at the start of your terminal prompt.**
+
+**Alternative:** You can run commands without activating by using the full path:
+```bash
+.venv/bin/uvicorn main:app --reload  # macOS/Linux
+.venv\Scripts\uvicorn main:app --reload  # Windows
 ```
 
 ### Run the Development Server
@@ -244,29 +268,71 @@ uvicorn main:app --reload --port 8001
 
 ### Error: Internal Server Error on Registration
 
-This usually means the database wasn't set up properly.
+This usually means the database wasn't set up properly or is corrupted.
 
+**Step 1: Verify database tables exist**
 ```bash
-# Delete and recreate database
+sqlite3 mcp_auth.db ".tables"
+```
+
+If you only see `alembic_version` without `users` and `refresh_tokens`, the database is corrupted.
+
+**Step 2: Delete and recreate database**
+```bash
+# Delete corrupted database
 rm mcp_auth.db
+
+# Recreate with migrations
 alembic upgrade head
 
-# Restart the server
+# Verify tables now exist
+sqlite3 mcp_auth.db ".tables"
+
+# Expected output: alembic_version  refresh_tokens  users
+```
+
+**Step 3: Restart the server**
+```bash
 uvicorn main:app --reload
 ```
 
 ### Error: No such table
 
 ```bash
-# Run migrations
+# Run migrations to create tables
 alembic upgrade head
+
+# Verify tables were created
+sqlite3 mcp_auth.db ".tables"
 ```
 
 ### Error: Module not found
 
+This means dependencies aren't installed or you're using the wrong Python environment.
+
 ```bash
+# Ensure you're in the virtual environment
+source .venv/bin/activate  # macOS/Linux
+.venv\Scripts\activate     # Windows
+
 # Reinstall dependencies
 uv sync --extra dev
+
+# Verify installation
+python -c "import fastapi, sqlalchemy, bcrypt; print('✓ All dependencies available')"
+```
+
+### Error: Wrong Python Version or Missing Packages
+
+If you have anaconda or system Python active, you might be using the wrong environment.
+
+```bash
+# Check which Python is being used
+which python
+
+# Should show: /path/to/MCP_Auth/.venv/bin/python
+# If it shows anaconda or system Python, activate venv:
+source .venv/bin/activate
 ```
 
 ### Tests Failing
@@ -275,8 +341,102 @@ uv sync --extra dev
 # Clean up test database
 rm test_integration.db
 
+# Ensure venv is active
+source .venv/bin/activate
+
 # Re-run tests
 pytest
+
+# If still failing, reinstall dependencies
+uv sync --extra dev
+pytest
+```
+
+### Database Corruption Issues
+
+If you encounter `sqlite3.OperationalError: no such index` or similar database errors:
+
+```bash
+# This indicates database is in inconsistent state
+# Cannot downgrade - delete and recreate
+
+rm mcp_auth.db
+alembic upgrade head
+
+# Verify
+sqlite3 mcp_auth.db ".schema users"
+```
+
+## Common First-Time Setup Tips
+
+### Always Use the Virtual Environment
+
+The most common issues arise from using the wrong Python environment:
+
+```bash
+# GOOD - Using venv Python
+source .venv/bin/activate
+python --version  # Should show Python 3.12.x
+uvicorn main:app --reload
+
+# BAD - Using system or anaconda Python
+# This may use wrong dependencies or versions
+uvicorn main:app --reload  # Without activating venv
+```
+
+### Verify Everything After Initial Setup
+
+```bash
+# 1. Check venv is active
+which python
+# Should output: /path/to/MCP_Auth/.venv/bin/python
+
+# 2. Verify dependencies
+python -c "import fastapi, sqlalchemy, bcrypt, jwt; print('✓ All imports work')"
+
+# 3. Check database is properly set up
+sqlite3 mcp_auth.db ".tables"
+# Should output: alembic_version  refresh_tokens  users
+
+# 4. Test server starts
+uvicorn main:app --reload
+# Should see: "Application startup complete"
+
+# 5. Test basic endpoint
+curl http://127.0.0.1:8000/
+# Should return: {"message":"Hello World"}
+```
+
+### Recommended First-Time Flow
+
+```bash
+# 1. Clone and navigate to project
+git clone https://github.com/jtuchinsky/MCP_Auth.git
+cd MCP_Auth
+
+# 2. Set up environment
+cp .env.example .env
+python -c "import secrets; print(f'SECRET_KEY={secrets.token_urlsafe(32)}'))" >> .env
+
+# 3. Install dependencies
+uv sync --extra dev
+
+# 4. Verify installation
+.venv/bin/python -c "import fastapi; print('✓ Installation successful')"
+
+# 5. Set up database
+alembic upgrade head
+sqlite3 mcp_auth.db ".tables"
+
+# 6. Activate venv and start server
+source .venv/bin/activate
+uvicorn main:app --reload
+
+# 7. In another terminal, test the API
+curl http://127.0.0.1:8000/
+curl -X POST "http://127.0.0.1:8000/auth/register" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com", "password": "password123"}'
 ```
 
 ## Quick Reference: Common Commands
