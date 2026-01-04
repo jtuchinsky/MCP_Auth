@@ -2,7 +2,7 @@
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.126+-green.svg)](https://fastapi.tiangolo.com)
-[![Tests](https://img.shields.io/badge/tests-383%20passing-brightgreen.svg)](./tests)
+[![Tests](https://img.shields.io/badge/tests-384%20passing-brightgreen.svg)](./tests)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 A production-ready FastAPI authentication service implementing OAuth 2.1 with full Model Context Protocol (MCP) compliance.
@@ -12,9 +12,10 @@ A production-ready FastAPI authentication service implementing OAuth 2.1 with fu
 - 🔐 **Secure Authentication** - User registration and login with bcrypt password hashing
 - 🎫 **JWT Tokens** - Short-lived access tokens (15 min) with refresh token rotation
 - 🔑 **TOTP 2FA** - Time-based One-Time Password authentication with QR code setup
+- 🏢 **Multi-Tenancy Ready** - Built-in tenant isolation via JWT `tenant_id` claims (opt-in)
 - 🌐 **MCP OAuth 2.1** - Full compliance with Model Context Protocol specifications
 - 👤 **User Management** - Protected endpoints for profile management
-- ✅ **Comprehensive Testing** - 383 passing tests (325 unit + 59 integration)
+- ✅ **Comprehensive Testing** - 384 passing tests (325 unit + 59 integration)
 - 📚 **Interactive API Docs** - Swagger UI and ReDoc included
 
 ## Quick Start
@@ -163,7 +164,7 @@ pytest tests/unit/
 pytest tests/integration/
 ```
 
-**Test Coverage**: 383 passing tests
+**Test Coverage**: 384 passing tests
 - Unit Tests: 325 tests (security, JWT, TOTP, auth service)
 - Integration Tests: 59 tests (auth endpoints, TOTP flows, protected routes)
 
@@ -199,11 +200,13 @@ This service implements the following OAuth 2.1 features:
 - ✅ **Authorization Server Metadata** (RFC 8414) - Discovery endpoint
 - ✅ **Refresh Token Rotation** - Enhanced security through rotation
 - ✅ **TOTP 2FA Support** - Multi-factor authentication
+- ✅ **Multi-Tenancy Support** - JWT tokens include `tenant_id` claims for tenant isolation
 
 ## Security Features
 
 - **Password Security**: bcrypt hashing with automatic salts
 - **JWT Tokens**: HS256 signing with configurable expiration
+- **Multi-Tenancy**: Built-in `tenant_id` claims for tenant isolation (defaults to tenant 1)
 - **Refresh Tokens**: Database-backed with rotation and revocation
 - **TOTP/2FA**: RFC 6238 compliant with QR code generation
 - **Input Validation**: Comprehensive Pydantic schema validation

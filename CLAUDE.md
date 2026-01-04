@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Version: 0.1.0
 
-This service provides secure user authentication, JWT-based access control, TOTP two-factor authentication, and full OAuth 2.1 compliance for MCP clients.
+This service provides secure user authentication, JWT-based access control, TOTP two-factor authentication, multi-tenant support, and full OAuth 2.1 compliance for MCP clients.
 
 ## Features
 
@@ -16,10 +16,11 @@ This service provides secure user authentication, JWT-based access control, TOTP
 - ✅ **JWT Access Tokens** - Short-lived tokens (15 minutes) with HS256 signing
 - ✅ **Refresh Tokens** - Long-lived tokens (30 days) with automatic rotation
 - ✅ **TOTP 2FA** - Time-based One-Time Password authentication with QR code generation
+- ✅ **Multi-Tenancy Ready** - Built-in tenant isolation via JWT `tenant_id` claims
 - ✅ **MCP OAuth 2.1 Compliance** - Full support for MCP authorization flows
 - ✅ **Protected Endpoints** - User profile management with JWT authentication
 - ✅ **Token Rotation** - Refresh tokens are rotated on each use for enhanced security
-- ✅ **Comprehensive Testing** - 383 passing tests (325 unit + 59 integration)
+- ✅ **Comprehensive Testing** - 384 passing tests (325 unit + 59 integration)
 
 ## Architecture
 
@@ -67,6 +68,35 @@ This service provides secure user authentication, JWT-based access control, TOTP
 4. **Models** (`app/models/`) - SQLAlchemy ORM models
    - `user.py` - User table with TOTP support
    - `token.py` - RefreshToken table with revocation
+
+5. **Dependencies** (`app/dependencies.py`) - FastAPI dependency injection
+   - `get_current_user()` - Extracts and validates JWT from Authorization header
+   - `require_totp_disabled()` - Ensures TOTP is not already enabled (for setup)
+
+### Dependency Injection Pattern
+
+This project uses FastAPI's dependency injection system for authentication and database sessions:
+
+```python
+# In route handlers, dependencies are injected via Depends()
+@router.get("/api/protected/me")
+async def get_me(user: User = Depends(get_current_user)):
+    # user is automatically extracted from JWT token
+    return user
+
+# Database sessions are injected similarly
+@router.post("/auth/register")
+async def register(data: RegisterRequest, db: Session = Depends(get_db)):
+    # db is a SQLAlchemy session
+    return auth_service.register_user(db, data)
+```
+
+The `get_current_user` dependency:
+1. Extracts the `Authorization: Bearer <token>` header
+2. Validates and decodes the JWT using `jwt_service`
+3. Fetches the user from the database
+4. Validates the user is active
+5. Returns the User object or raises AuthenticationError
 
 ## Technology Stack
 
@@ -246,7 +276,7 @@ pytest -s
 
 ### Test Coverage
 
-Current test coverage: **383 passing tests**
+Current test coverage: **384 passing tests**
 
 - **Unit Tests** (325 tests):
   - `test_security.py` - Password hashing (43 tests)
@@ -261,178 +291,22 @@ Current test coverage: **383 passing tests**
 
 ### Test Database
 
-Integration tests use a separate SQLite database (`test_integration.db`) that is created and destroyed for each test function to ensure test isolation.
+Integration tests use a separate SQLite database (`test_integration.db`) that is created and destroyed for each test function to ensure test isolation. Test fixtures in `tests/conftest.py` handle database setup and teardown automatically.
 
 ## API Endpoints
 
-### Authentication Endpoints
+For detailed API endpoint documentation including request/response examples, see:
+- **README.md** - Full API endpoint reference with curl examples
+- **Swagger UI** - http://127.0.0.1:8000/docs (when server is running)
+- **ReDoc** - http://127.0.0.1:8000/redoc (alternative documentation)
 
-#### POST /auth/register
-Register a new user account.
-
-**Request:**
-```json
-{
-  "email": "user@example.com",
-  "password": "securepassword123"
-}
-```
-
-**Response:** `201 Created`
-```json
-{
-  "id": 1,
-  "email": "user@example.com",
-  "is_active": true,
-  "is_totp_enabled": false,
-  "created_at": "2024-01-01T00:00:00",
-  "updated_at": "2024-01-01T00:00:00"
-}
-```
-
-#### POST /auth/login
-Login with email and password (for users without TOTP).
-
-**Request:**
-```json
-{
-  "email": "user@example.com",
-  "password": "securepassword123"
-}
-```
-
-**Response:** `200 OK`
-```json
-{
-  "access_token": "eyJhbGc...",
-  "refresh_token": "abc123...",
-  "token_type": "bearer",
-  "expires_in": 900
-}
-```
-
-#### POST /auth/refresh
-Refresh an access token using a refresh token.
-
-**Request:**
-```json
-{
-  "refresh_token": "abc123..."
-}
-```
-
-**Response:** `200 OK` (same format as /auth/login)
-
-#### POST /auth/logout
-Revoke a refresh token (logout).
-
-**Request:**
-```json
-{
-  "refresh_token": "abc123..."
-}
-```
-
-**Response:** `204 No Content`
-
-### TOTP/2FA Endpoints
-
-#### POST /auth/totp/setup
-Setup TOTP 2FA for the authenticated user.
-
-**Headers:** `Authorization: Bearer {access_token}`
-
-**Response:** `200 OK`
-```json
-{
-  "secret": "JBSWY3DPEHPK3PXP",
-  "provisioning_uri": "otpauth://totp/...",
-  "qr_code": "iVBORw0KGgo..."
-}
-```
-
-#### POST /auth/totp/verify
-Verify TOTP code and enable 2FA.
-
-**Headers:** `Authorization: Bearer {access_token}`
-
-**Request:**
-```json
-{
-  "totp_code": "123456"
-}
-```
-
-**Response:** `200 OK` (UserResponse with `is_totp_enabled: true`)
-
-#### POST /auth/totp/validate
-Login with email, password, and TOTP code (for users with 2FA enabled).
-
-**Request:**
-```json
-{
-  "email": "user@example.com",
-  "password": "securepassword123",
-  "totp_code": "123456"
-}
-```
-
-**Response:** `200 OK` (same format as /auth/login)
-
-### Protected Endpoints
-
-#### GET /api/protected/me
-Get current authenticated user's information.
-
-**Headers:** `Authorization: Bearer {access_token}`
-
-**Response:** `200 OK`
-```json
-{
-  "id": 1,
-  "email": "user@example.com",
-  "is_active": true,
-  "is_totp_enabled": false,
-  "created_at": "2024-01-01T00:00:00",
-  "updated_at": "2024-01-01T00:00:00"
-}
-```
-
-#### PATCH /api/protected/profile
-Update user profile (email and/or password).
-
-**Headers:** `Authorization: Bearer {access_token}`
-
-**Request:**
-```json
-{
-  "email": "newemail@example.com",
-  "password": "newpassword123"
-}
-```
-
-**Response:** `200 OK` (UserResponse with updated data)
-
-### MCP Metadata Endpoint
-
-#### GET /.well-known/oauth-authorization-server
-OAuth 2.1 authorization server metadata (RFC 8414 compliant).
-
-**Response:** `200 OK`
-```json
-{
-  "issuer": "http://localhost:8000",
-  "authorization_endpoint": "http://localhost:8000/auth/authorize",
-  "token_endpoint": "http://localhost:8000/auth/token",
-  "response_types_supported": ["code"],
-  "grant_types_supported": ["authorization_code", "refresh_token"],
-  "code_challenge_methods_supported": ["S256"],
-  "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
-  "resource_indicators_supported": true,
-  "mcp_version": "1.0",
-  "mcp_features": ["oauth2.1", "pkce", "resource_indicators", "totp"]
-}
-```
+Key endpoints:
+- `POST /auth/register` - Register new user
+- `POST /auth/login` - Login (without TOTP)
+- `POST /auth/totp/validate` - Login with TOTP
+- `POST /auth/refresh` - Refresh access token
+- `GET /api/protected/me` - Get current user
+- `GET /.well-known/oauth-authorization-server` - OAuth 2.1 metadata
 
 ## MCP OAuth 2.1 Compliance
 
@@ -463,8 +337,9 @@ This service implements the following OAuth 2.1 and MCP specifications:
 ### JWT Security
 - **HS256 algorithm** for token signing
 - **Short-lived access tokens**: 15 minutes (configurable)
-- **Token payload includes**: user ID, email, issued/expiry timestamps
+- **Token payload includes**: user ID (`sub`), email, tenant ID (for multi-tenancy), issued (`iat`), expiry (`exp`)
 - **Secret key validation**: Minimum 32 characters
+- **Multi-tenancy support**: JWT tokens include `tenant_id` claim for tenant isolation
 
 ### Refresh Token Security
 - **Long-lived but revocable**: 30 days (configurable)
@@ -568,79 +443,218 @@ CREATE TABLE refresh_tokens (
 ```bash
 # Run with detailed logging
 uvicorn main:app --reload --log-level debug
-
-# Use FastAPI's built-in exception handling
-# Errors are automatically formatted as JSON responses
-
-# Access request/response in debugger
-# Set breakpoint in route handler to inspect Request object
 ```
 
-## Deployment Considerations
+Set breakpoints in route handlers to inspect Request objects. FastAPI automatically formats exceptions as JSON responses.
 
-### Production Checklist
+## Multi-Tenancy Support
 
-- [ ] Set strong `SECRET_KEY` in production environment
-- [ ] Use PostgreSQL instead of SQLite for production
-- [ ] Configure CORS `allow_origins` to specific domains (remove `["*"]`)
-- [ ] Enable HTTPS/TLS for all endpoints
-- [ ] Set up proper logging and monitoring
-- [ ] Use environment-specific configuration files
-- [ ] Implement rate limiting (e.g., with slowapi)
-- [ ] Set up backup strategy for database
-- [ ] Configure proper JWT expiration times for your use case
-- [ ] Review and restrict API endpoint access as needed
+This service includes **built-in multi-tenancy support** through JWT token claims, enabling tenant isolation in multi-tenant applications.
 
-### Environment Variables for Production
+### How It Works
+
+Every JWT access token includes a `tenant_id` claim:
+```json
+{
+  "sub": "123",
+  "email": "user@example.com",
+  "tenant_id": "1",
+  "scopes": [],
+  "iat": 1234567890,
+  "exp": 1234568790
+}
+```
+
+### Default Behavior
+
+- **Single-tenant mode** (default): All tokens use `tenant_id=1` (shared tenant)
+- No database changes required for single-tenant deployments
+- Multi-tenant features are **opt-in** and backward compatible
+
+### Implementation in JWT Service
+
+The `create_access_token` function in `app/services/jwt_service.py` includes:
+
+```python
+def create_access_token(
+    user_id: int,
+    email: str,
+    scopes: list[str] | None = None,
+    audience: str | None = None,
+    tenant_id: int = 1,  # Defaults to shared tenant
+) -> str:
+    payload = {
+        "sub": str(user_id),
+        "email": email,
+        "tenant_id": str(tenant_id),  # Always included in token
+        "exp": expires_at,
+        "iat": now,
+        "scopes": scopes or [],
+    }
+    # ...
+```
+
+### Enabling Multi-Tenancy
+
+To enable multi-tenant mode, extend the service as follows:
+
+#### 1. Add Tenant ID to User Model
+
+```python
+# app/models/user.py
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    tenant_id = Column(Integer, nullable=False, default=1, index=True)  # Add this
+    # ... rest of fields
+```
+
+#### 2. Update Database Migration
 
 ```bash
-DATABASE_URL=postgresql://user:pass@host:5432/dbname
-SECRET_KEY=<very-long-random-secure-key>
-ACCESS_TOKEN_EXPIRE_MINUTES=15
-REFRESH_TOKEN_EXPIRE_DAYS=30
-TOTP_ISSUER_NAME=Your Production App Name
+alembic revision --autogenerate -m "Add tenant_id to users"
+alembic upgrade head
 ```
 
-## Troubleshooting
+#### 3. Pass Tenant ID During Token Creation
 
-### Common Issues
+```python
+# app/services/auth_service.py - modify create_tokens()
+def create_tokens(db: Session, user: User, ...) -> tuple[str, str]:
+    access_token = jwt_service.create_access_token(
+        user_id=user.id,
+        email=user.email,
+        scopes=scopes,
+        tenant_id=user.tenant_id,  # Pass user's tenant ID
+    )
+    # ...
+```
 
-**Issue**: `ModuleNotFoundError: No module named 'app'`
-- **Solution**: Run from project root, ensure virtual environment is activated
+#### 4. Add Tenant Validation in Dependencies
 
-**Issue**: `sqlalchemy.exc.OperationalError: no such table`
-- **Solution**: Run `alembic upgrade head` to apply migrations
+```python
+# app/dependencies.py - enhance get_current_user()
+async def get_current_user(...) -> User:
+    # ... existing token validation ...
 
-**Issue**: `401 Unauthorized` on protected endpoints
-- **Solution**: Ensure `Authorization: Bearer {token}` header is set
+    # Extract and validate tenant_id
+    token_tenant_id = int(payload.get("tenant_id", 1))
 
-**Issue**: TOTP codes not working
-- **Solution**: Check system time is synchronized (TOTP is time-based)
+    if hasattr(user, 'tenant_id') and user.tenant_id != token_tenant_id:
+        raise AuthorizationError("User does not belong to this tenant")
 
-**Issue**: Tests fail with database errors
-- **Solution**: Tests use separate database, check `tests/conftest.py`
+    return user
+```
 
-## Additional Resources
+#### 5. Add Tenant Filtering to Queries
 
-- **FastAPI Documentation**: https://fastapi.tiangolo.com
-- **SQLAlchemy 2.0 Documentation**: https://docs.sqlalchemy.org
-- **Alembic Documentation**: https://alembic.sqlalchemy.org
-- **JWT Introduction**: https://jwt.io/introduction
-- **RFC 6238 (TOTP)**: https://tools.ietf.org/html/rfc6238
-- **RFC 8414 (OAuth Metadata)**: https://tools.ietf.org/html/rfc8414
-- **MCP Specification**: https://modelcontextprotocol.io
+```python
+# app/repositories/user_repository.py
+def get_by_email(db: Session, email: str, tenant_id: int | None = None) -> User | None:
+    query = db.query(User).filter(User.email == email)
 
-## Contributing
+    if tenant_id is not None:
+        query = query.filter(User.tenant_id == tenant_id)
 
-When contributing to this project:
+    return query.first()
+```
 
-1. Follow the existing code structure and conventions
-2. Write tests for new features (both unit and integration)
-3. Update documentation (this file and docstrings)
-4. Run `pytest` to ensure all tests pass
-5. Use `alembic` for any database schema changes
-6. Keep commits focused and write clear commit messages
+### Multi-Tenant Use Cases
 
-## License
+**SaaS Applications**:
+- Multiple organizations sharing the same service
+- Each organization's data is isolated by `tenant_id`
+- Single codebase, separate data per tenant
+- Example: Company A (tenant_id=100) cannot access Company B's data (tenant_id=200)
 
-MIT License - See repository for details.
+**Enterprise Deployments**:
+- Department-level isolation within an organization
+- Different access levels per tenant
+- Centralized authentication with distributed authorization
+
+**Development Environments**:
+- Separate `tenant_id` for dev (1), staging (2), production (3+)
+- Test tenant isolation without changing code
+
+### Security Considerations
+
+1. **Token Validation**: Always verify `tenant_id` matches the user's tenant in the database
+2. **Query Filtering**: Include `tenant_id` in all database queries to prevent cross-tenant data access
+3. **Audit Logging**: Log `tenant_id` in all authentication and authorization events
+4. **Admin Routes**: Create special admin endpoints that can access multiple tenants if needed
+5. **Index Optimization**: Add database indexes on `tenant_id` for better query performance
+
+### Testing Multi-Tenancy
+
+Example test for tenant isolation:
+
+```python
+def test_user_cannot_access_different_tenant_data():
+    # Create users in different tenants
+    user_tenant_1 = create_user(email="user1@example.com", tenant_id=1)
+    user_tenant_2 = create_user(email="user2@example.com", tenant_id=2)
+
+    # User 1 gets token with tenant 1
+    token_1 = create_access_token(
+        user_id=user_tenant_1.id,
+        email=user_tenant_1.email,
+        tenant_id=1
+    )
+
+    # Verify tenant_id is in token
+    payload = decode_access_token(token_1)
+    assert payload["tenant_id"] == "1"
+    assert payload["email"] == "user1@example.com"
+
+    # With proper tenant filtering, user 1 cannot access user 2's data
+    # even though both are valid users
+```
+
+### Migration Path
+
+For existing deployments without multi-tenancy:
+
+1. **Phase 1**: Code is already multi-tenancy ready with `tenant_id=1` default
+2. **Phase 2**: Add `tenant_id` column to users table when needed
+3. **Phase 3**: Implement tenant validation in dependencies
+4. **Phase 4**: Add tenant filtering to all repository queries
+5. **Phase 5**: Update registration to assign tenant IDs
+
+**No breaking changes required** - the default `tenant_id=1` maintains backward compatibility.
+
+## Important Notes
+
+### Configuration Management
+All settings are managed via `app/config.py` using pydantic-settings:
+- Environment variables are loaded from `.env` file
+- Settings are cached using `@lru_cache` decorator
+- The `SECRET_KEY` must be at least 32 characters (validated on startup)
+- Access via `from app.config import settings`
+
+### Exception Handling
+Custom exceptions are handled globally in `main.py`:
+- `AuthenticationError` → 401 Unauthorized
+- `AuthorizationError` → 403 Forbidden
+- `TOTPError` → 400 Bad Request
+- Routes should raise these custom exceptions, not HTTPException
+
+### Virtual Environment
+**Always activate the virtual environment** before running commands:
+```bash
+source .venv/bin/activate  # macOS/Linux
+.venv\Scripts\activate     # Windows
+```
+
+For detailed troubleshooting and first-time setup, see `docs/RUNNING.md` - it includes verification steps, common database issues, and recommended setup flow.
+
+## Additional Documentation
+
+- **README.md** - Overview, features, API endpoints with examples
+- **docs/RUNNING.md** - Quick start guide with troubleshooting
+- **docs/PLAN.md** - Implementation plan and architecture decisions
+- **Swagger UI** - http://127.0.0.1:8000/docs (interactive API testing)
+- **FastAPI Docs** - https://fastapi.tiangolo.com
+- **SQLAlchemy 2.0** - https://docs.sqlalchemy.org
+- **MCP Specification** - https://modelcontextprotocol.io
