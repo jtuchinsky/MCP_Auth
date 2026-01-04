@@ -14,6 +14,7 @@ def create_access_token(
     email: str,
     scopes: list[str] | None = None,
     audience: str | None = None,
+    tenant_id: int = 1,
 ) -> str:
     """
     Create a JWT access token.
@@ -23,6 +24,7 @@ def create_access_token(
         email: User's email address
         scopes: Optional list of OAuth2 scopes
         audience: Optional OAuth2 audience (resource indicator)
+        tenant_id: Tenant ID for multi-tenant applications (defaults to 1 for shared tenant)
 
     Returns:
         Signed JWT token string
@@ -38,6 +40,7 @@ def create_access_token(
     payload = {
         "sub": str(user_id),
         "email": email,
+        "tenant_id": str(tenant_id),
         "exp": expires_at,
         "iat": now,
         "scopes": scopes or [],
