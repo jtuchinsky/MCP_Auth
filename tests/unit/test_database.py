@@ -1,6 +1,5 @@
 """Unit tests for database configuration and session management."""
 
-import pytest
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
