@@ -12,43 +12,68 @@ from app.repositories import token_repository, user_repository
 from app.services import jwt_service
 
 
-def register_user(db: Session, email: str, password: str) -> User:
+def register_user(
+    db: Session,
+    tenant_id: int,
+    username: str,
+    email: str,
+    password: str,
+    role: str = "MEMBER",
+) -> User:
     """
-    Register a new user.
+    Register a new user within a tenant.
 
     Args:
         db: Database session
-        email: User's email address
+        tenant_id: Tenant's ID
+        username: User's username (unique per tenant)
+        email: User's email address (globally unique)
         password: Plain text password
+        role: User's role (OWNER, ADMIN, MEMBER). Defaults to MEMBER.
 
     Returns:
         Created User instance
 
     Raises:
-        ValueError: If user with email already exists
+        ValueError: If user with email already exists or username is taken in tenant
 
     Example:
-        >>> user = register_user(db, "user@example.com", "secure_password")
-        >>> print(user.email)
-        user@example.com
+        >>> user = register_user(db, 1, "alice", "alice@example.com", "password", "MEMBER")
+        >>> print(user.username)
+        alice
     """
-    # Check if user already exists
+    # Check if user with email already exists (globally unique)
     existing_user = user_repository.get_by_email(db, email)
     if existing_user:
         raise ValueError(f"User with email {email} already exists")
+
+    # Check if username is taken in this tenant
+    existing_username = user_repository.get_by_tenant_and_username(db, tenant_id, username)
+    if existing_username:
+        raise ValueError(f"Username {username} is already taken in this tenant")
 
     # Hash password
     password_hash = hash_password(password)
 
     # Create user
-    user = user_repository.create(db, email=email, password_hash=password_hash)
+    user = user_repository.create(
+        db=db,
+        tenant_id=tenant_id,
+        username=username,
+        email=email,
+        password_hash=password_hash,
+        role=role,
+    )
 
     return user
 
 
 def authenticate_user(db: Session, email: str, password: str) -> User:
     """
-    Authenticate a user with email and password.
+    Authenticate a user with email and password (legacy method).
+
+    NOTE: This method authenticates by email only. For tenant-based authentication,
+    use authenticate_tenant_user() instead.
 
     Args:
         db: Database session
@@ -79,6 +104,59 @@ def authenticate_user(db: Session, email: str, password: str) -> User:
     if not user.is_active:
         raise AuthenticationError("User account is disabled")
 
+    # Check if tenant is active
+    if not user.tenant.is_active:
+        raise AuthenticationError("Tenant account is disabled")
+
+    return user
+
+
+def authenticate_tenant_user(
+    db: Session,
+    tenant_id: int,
+    username: str,
+    password: str,
+) -> User:
+    """
+    Authenticate a user within a tenant by username and password.
+
+    This is used for multi-user tenants where additional users (beyond the owner)
+    log in using their username within the tenant.
+
+    Args:
+        db: Database session
+        tenant_id: Tenant's ID
+        username: User's username
+        password: Plain text password
+
+    Returns:
+        User instance if authentication succeeds
+
+    Raises:
+        AuthenticationError: If authentication fails
+
+    Example:
+        >>> user = authenticate_tenant_user(db, 1, "alice", "password")
+        >>> print(user.username)
+        alice
+    """
+    # Get user by tenant and username
+    user = user_repository.get_by_tenant_and_username(db, tenant_id, username)
+    if not user:
+        raise AuthenticationError("Invalid username or password")
+
+    # Verify password
+    if not verify_password(password, user.password_hash):
+        raise AuthenticationError("Invalid username or password")
+
+    # Check if user is active
+    if not user.is_active:
+        raise AuthenticationError("User account is disabled")
+
+    # Check if tenant is active
+    if not user.tenant.is_active:
+        raise AuthenticationError("Tenant account is disabled")
+
     return user
 
 
@@ -91,9 +169,12 @@ def create_tokens(
     """
     Create access and refresh tokens for a user.
 
+    The access token includes tenant_id and role claims for multi-tenant
+    authorization and role-based access control.
+
     Args:
         db: Database session
-        user: User instance
+        user: User instance (must have tenant_id and role attributes)
         client_id: Optional OAuth2 client ID
         scope: Optional OAuth2 scope
 
@@ -105,11 +186,13 @@ def create_tokens(
         >>> print(len(access) > 0 and len(refresh) > 0)
         True
     """
-    # Create access token
+    # Create access token with tenant and role information
     scopes = scope.split() if scope else []
     access_token = jwt_service.create_access_token(
         user_id=user.id,
         email=user.email,
+        tenant_id=user.tenant_id,
+        role=user.role,
         scopes=scopes,
     )
 

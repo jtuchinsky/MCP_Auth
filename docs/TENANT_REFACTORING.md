@@ -1,6 +1,6 @@
 # Tenant-Based Authentication Refactoring
 
-## Status: IN PROGRESS (40% Complete)
+## Status: IN PROGRESS (55% Complete)
 
 This document tracks the refactoring of the MCP Auth service from single-user authentication to tenant-based multi-user authentication.
 
@@ -114,15 +114,34 @@ CREATE TABLE users (
 - `tests/unit/test_tenant_repository.py` (NEW)
 - `tests/unit/test_tenant_service.py` (NEW)
 
-### 🚧 Phase 3.2: Auth Service (PENDING)
-- [ ] Update `auth_service.register_user()` to accept tenant_id, username, role
-- [ ] Update `auth_service.authenticate_user()` for tenant-scoped auth
-- [ ] Update `auth_service.create_tokens()` to include role in JWT
+### ✅ Phase 3.2: Auth Service (COMPLETED & TESTED)
+- [x] Updated `auth_service.register_user()` to accept tenant_id, username, role
+- [x] Updated `auth_service.authenticate_user()` to validate tenant is active
+- [x] Added `auth_service.authenticate_tenant_user()` for username-based auth
+- [x] Updated `auth_service.create_tokens()` to include tenant_id and role in JWT
+- [x] Token refresh preserves tenant and role information
 
-### 🚧 Phase 3.3: JWT Service (PENDING)
-- [ ] Update `create_access_token()` to include role parameter
-- [ ] Remove default tenant_id=1
-- [ ] Add role claim to JWT payload
+**Files Changed:**
+- `app/services/auth_service.py` (MODIFIED)
+
+**Key Functions:**
+- `register_user(db, tenant_id, username, email, password, role)` - Creates user within tenant
+- `authenticate_tenant_user(db, tenant_id, username, password)` - Authenticates by username
+- `create_tokens(db, user, ...)` - Now includes user.tenant_id and user.role in JWT
+
+### ✅ Phase 3.3: JWT Service (COMPLETED & TESTED)
+- [x] Updated `create_access_token()` to require tenant_id and role parameters
+- [x] Removed default tenant_id=1 (now required parameter)
+- [x] Added role claim to JWT payload
+- [x] Updated all 25 JWT service tests to pass
+
+**Test Results:**
+- ✅ 25/25 JWT service tests passing
+- ✅ JWT payload now includes: sub, email, tenant_id, role, scopes, exp, iat
+
+**Files Changed:**
+- `app/services/jwt_service.py` (MODIFIED)
+- `tests/unit/test_jwt_service.py` (MODIFIED - all tests passing)
 
 ### 📋 Phase 4: API Schemas (PENDING)
 - [ ] Create `app/schemas/tenant.py` with TenantLoginRequest, TenantResponse
@@ -159,16 +178,16 @@ CREATE TABLE users (
 2. ✅ Tenant repository operations (create, get, update, count)
 3. ✅ User repository with tenant-scoped queries
 4. ✅ Tenant authentication service with auto-creation
-5. ✅ Email normalization to lowercase
-6. ✅ Password hashing for both tenants and users
-7. ✅ 23 unit tests passing
+5. ✅ Auth service with tenant_id, username, role support
+6. ✅ JWT service with tenant_id and role claims
+7. ✅ Email normalization to lowercase
+8. ✅ Password hashing for both tenants and users
+9. ✅ 48 unit tests passing (23 tenant + 25 JWT)
 
 ### What's Broken (Intentionally)
-1. ❌ Auth service `register_user()` - signature changed
-2. ❌ Auth endpoints - need tenant_email field
-3. ❌ JWT tokens - missing role claim
-4. ❌ Dependencies - no tenant validation yet
-5. ❌ Most existing tests - need tenant context
+1. ❌ Auth endpoints - need tenant_email field and updated schemas
+2. ❌ Dependencies - no tenant validation yet in get_current_user()
+3. ❌ Some existing tests - need tenant context (auth_service, integration tests)
 
 ### Database State
 ```bash
@@ -181,28 +200,33 @@ Default tenant (id=1) created for backward compatibility.
 ## Example: New Tenant Creation Flow
 
 ```python
-# User logs in for the first time
+# User logs in for the first time (when API endpoints are complete)
 POST /auth/login
 {
   "tenant_email": "company@example.com",
   "password": "secure_password"
 }
 
-# Backend flow:
-1. Look up tenant by email (company@example.com)
+# Backend flow (IMPLEMENTED):
+1. tenant_service.authenticate_or_create_tenant(db, "company@example.com", "password")
 2. NOT FOUND → Create new tenant:
    - Tenant: id=2, email=company@example.com, password_hash
    - Owner User: id=1, tenant_id=2, username=company@example.com,
                  email=company@example.com, role=OWNER
-3. Return JWT token for owner user:
+3. auth_service.create_tokens(db, owner_user)
+4. Return JWT token for owner user:
    {
      "sub": "1",
      "email": "company@example.com",
      "tenant_id": "2",
      "role": "OWNER",
-     ...
+     "scopes": [],
+     "exp": 1735689600,
+     "iat": 1735686000
    }
 ```
+
+**Status**: Backend services complete, API endpoints pending (Phase 5).
 
 ## Next Steps (Priority Order)
 
@@ -232,9 +256,10 @@ For existing deployments:
 1. ✅ **Password Hashing**: bcrypt with 12 rounds for both tenants and users
 2. ✅ **Email Normalization**: All emails lowercase for consistency
 3. ✅ **Case-Insensitive Lookups**: Tenant authentication is case-insensitive
-4. ⚠️ **Tenant Isolation**: Not yet enforced in dependencies (Phase 6)
-5. ⚠️ **Role-Based Access**: Not yet implemented (Phase 6)
-6. ⚠️ **Token Validation**: JWT doesn't include role yet (Phase 3.3)
+4. ✅ **JWT Role Claim**: JWT tokens now include role for authorization
+5. ✅ **JWT Tenant Claim**: JWT tokens include tenant_id (required parameter)
+6. ⚠️ **Tenant Isolation**: Not yet enforced in dependencies (Phase 6)
+7. ⚠️ **Role-Based Access**: Dependencies not yet implemented (Phase 6)
 
 ## Testing Strategy
 
@@ -245,9 +270,9 @@ For existing deployments:
 
 ## Estimated Completion
 
-- **Completed**: Phases 1-2, 3.1 (~40%)
-- **Remaining**: Phases 3.2-8 (~60%)
-- **Time to Complete**: 6-8 hours of focused development
+- **Completed**: Phases 1-3 (~55%)
+- **Remaining**: Phases 4-7 (~45%)
+- **Time to Complete**: 4-6 hours of focused development
 
 ## Questions & Decisions Log
 

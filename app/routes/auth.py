@@ -7,11 +7,12 @@ from app.core.exceptions import AuthenticationError, TOTPError
 from app.database import get_db
 from app.dependencies import get_current_user, require_totp_disabled
 from app.models.user import User
-from app.repositories import token_repository, user_repository
+from app.repositories import token_repository, user_repository, tenant_repository
 from app.schemas.auth import LoginRequest, RefreshRequest, TokenResponse
+from app.schemas.tenant import TenantLoginRequest, TenantUserLoginRequest
 from app.schemas.totp import TOTPSetupResponse, TOTPValidateRequest, TOTPVerifyRequest
 from app.schemas.user import UserCreate, UserResponse
-from app.services import auth_service, totp_service
+from app.services import auth_service, tenant_service, totp_service
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -20,8 +21,9 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
     "/register",
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Register a new user",
-    description="Create a new user account with email and password.",
+    summary="[DEPRECATED] Register a new user",
+    description="⚠️ DEPRECATED: Use /auth/login instead. Tenants are created automatically on first login.",
+    deprecated=True,
 )
 async def register(
     user_data: UserCreate,
@@ -30,8 +32,11 @@ async def register(
     """
     Register a new user.
 
+    **⚠️ DEPRECATED**: This endpoint is deprecated in favor of tenant-based authentication.
+    Use `/auth/login` instead - tenants and owner users are created automatically on first login.
+
     Args:
-        user_data: User registration data (email, password)
+        user_data: User registration data (tenant_id, username, email, password, role)
         db: Database session
 
     Returns:
@@ -43,8 +48,11 @@ async def register(
     try:
         user = auth_service.register_user(
             db=db,
+            tenant_id=user_data.tenant_id,
+            username=user_data.username,
             email=user_data.email,
             password=user_data.password,
+            role=user_data.role,
         )
         return UserResponse.model_validate(user)
     except ValueError as e:
@@ -57,21 +65,29 @@ async def register(
 @router.post(
     "/login",
     response_model=TokenResponse,
-    summary="Login with email and password",
-    description="Authenticate user and return access/refresh tokens. Returns 403 if TOTP is required.",
+    summary="Login as tenant (creates tenant if new)",
+    description="Authenticate as tenant owner. Auto-creates tenant + owner user on first login. Returns 403 if TOTP is required.",
 )
 async def login(
-    login_data: LoginRequest,
+    login_data: TenantLoginRequest,
     db: Session = Depends(get_db),
 ) -> TokenResponse:
     """
-    Login with email and password.
+    Login as tenant (owner).
 
-    If user has TOTP enabled, returns 403 with message to use /auth/totp/validate.
-    Otherwise, authenticates and returns tokens.
+    **Tenant-based authentication flow**:
+    - If tenant doesn't exist: Creates new tenant + owner user automatically
+    - If tenant exists: Authenticates and returns owner's tokens
+    - If TOTP is enabled: Returns 403 with message to use /auth/totp/validate
+
+    The owner user will have:
+    - username = tenant email
+    - email = tenant email
+    - role = OWNER
+    - same password as tenant
 
     Args:
-        login_data: Login credentials (email, password, optional totp_code)
+        login_data: Tenant login credentials (tenant_email, password, optional totp_code)
         db: Database session
 
     Returns:
@@ -82,19 +98,138 @@ async def login(
         HTTPException 403: If TOTP is required but not provided
     """
     try:
-        # Authenticate user
-        user = auth_service.authenticate_user(
+        # Authenticate or create tenant (returns tenant, owner_user, is_new)
+        tenant, owner_user, is_new = tenant_service.authenticate_or_create_tenant(
             db=db,
-            email=login_data.email,
+            tenant_email=login_data.tenant_email,
+            password=login_data.password,
+        )
+
+        # Check if TOTP is enabled (skip for new tenants)
+        if not is_new and owner_user.is_totp_enabled:
+            # If TOTP code provided, validate it
+            if login_data.totp_code:
+                if not owner_user.totp_secret:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="TOTP secret not found.",
+                    )
+
+                is_valid = totp_service.verify_code(
+                    secret=owner_user.totp_secret,
+                    code=login_data.totp_code,
+                )
+
+                if not is_valid:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Invalid TOTP code.",
+                    )
+            else:
+                # TOTP required but not provided
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="TOTP verification required. Provide totp_code or use /auth/totp/validate endpoint.",
+                )
+
+        # Create tokens
+        access_token, refresh_token_str = auth_service.create_tokens(
+            db=db,
+            user=owner_user,
+            client_id=None,
+            scope=None,
+        )
+
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token_str,
+            token_type="bearer",
+            expires_in=900,  # 15 minutes
+        )
+
+    except AuthenticationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+        )
+
+
+@router.post(
+    "/login-user",
+    response_model=TokenResponse,
+    summary="Login as user within tenant",
+    description="Authenticate as a non-owner user within an existing tenant. Returns 403 if TOTP is required.",
+)
+async def login_user(
+    login_data: TenantUserLoginRequest,
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    """
+    Login as a user within a tenant.
+
+    **For non-owner users** in an existing tenant. Owner users should use `/auth/login` instead.
+
+    This endpoint requires:
+    - tenant_email: The tenant's email address (identifies the tenant)
+    - username: The user's username within the tenant
+    - password: The user's password
+    - totp_code: (optional) TOTP code if 2FA is enabled
+
+    Args:
+        login_data: User login credentials (tenant_email, username, password, optional totp_code)
+        db: Database session
+
+    Returns:
+        TokenResponse with access_token, refresh_token, token_type, expires_in
+
+    Raises:
+        HTTPException 401: If credentials are invalid or tenant doesn't exist
+        HTTPException 403: If TOTP is required but not provided
+    """
+    try:
+        # Look up tenant by email
+        tenant = tenant_repository.get_by_email(db, login_data.tenant_email)
+        if not tenant:
+            raise AuthenticationError("Invalid credentials")
+
+        # Check if tenant is active
+        if not tenant.is_active:
+            raise AuthenticationError("Tenant account is disabled")
+
+        # Authenticate user within tenant
+        user = auth_service.authenticate_tenant_user(
+            db=db,
+            tenant_id=tenant.id,
+            username=login_data.username,
             password=login_data.password,
         )
 
         # Check if TOTP is enabled
         if user.is_totp_enabled:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="TOTP verification required. Use /auth/totp/validate endpoint.",
-            )
+            # If TOTP code provided, validate it
+            if login_data.totp_code:
+                if not user.totp_secret:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="TOTP secret not found.",
+                    )
+
+                is_valid = totp_service.verify_code(
+                    secret=user.totp_secret,
+                    code=login_data.totp_code,
+                )
+
+                if not is_valid:
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Invalid TOTP code.",
+                    )
+            else:
+                # TOTP required but not provided
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="TOTP verification required. Provide totp_code in the request.",
+                )
 
         # Create tokens
         access_token, refresh_token_str = auth_service.create_tokens(

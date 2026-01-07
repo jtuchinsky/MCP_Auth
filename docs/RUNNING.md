@@ -84,8 +84,23 @@ alembic current
 # Check tables exist
 sqlite3 mcp_auth.db ".tables"
 
-# Expected output: alembic_version  refresh_tokens  users
+# Expected output: alembic_version  refresh_tokens  tenants  users
 ```
+
+### Verify Tenant Table
+
+Check that the tenants table exists and has the default tenant:
+
+```bash
+sqlite3 mcp_auth.db "SELECT * FROM tenants;"
+```
+
+**Expected output** (default tenant created during migration):
+```
+1|default@system.local|$2b$12$...|1|2026-01-07 22:06:59|2026-01-07 22:06:59
+```
+
+This default tenant (id=1) is used for backward compatibility with existing users.
 
 ## 4. Start the Server
 
@@ -188,36 +203,41 @@ curl http://127.0.0.1:8000/
 
 ### Common API Workflows
 
-#### A. Register a New User
-
-```bash
-curl -X POST "http://127.0.0.1:8000/auth/register" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "securepassword123"
-  }'
-```
-
-**Response:**
-```json
-{
-  "id": 1,
-  "email": "user@example.com",
-  "is_totp_enabled": false,
-  "is_active": true,
-  "created_at": "2024-12-26T...",
-  "updated_at": "2024-12-26T..."
-}
-```
-
-#### B. Login
+#### A. First Login (Auto-Creates Tenant + Owner User)
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/auth/login" \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "user@example.com",
+    "tenant_email": "company@example.com",
+    "password": "securepassword123"
+  }'
+```
+
+**What happens:**
+- Creates new tenant with email `company@example.com`
+- Creates owner user (username=email, role=OWNER)
+- Returns JWT tokens for owner user
+
+**Response:**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "a1b2c3d4e5f6...",
+  "token_type": "bearer",
+  "expires_in": 900
+}
+```
+
+#### B. Login
+
+**Login as Tenant Owner (Existing Tenant):**
+
+```bash
+curl -X POST "http://127.0.0.1:8000/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenant_email": "company@example.com",
     "password": "securepassword123"
   }'
 ```
@@ -230,6 +250,18 @@ curl -X POST "http://127.0.0.1:8000/auth/login" \
   "token_type": "bearer",
   "expires_in": 900
 }
+```
+
+**Login as User Within Tenant** (Future: When Multiple Users Exist):
+
+```bash
+curl -X POST "http://127.0.0.1:8000/auth/login-user" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenant_email": "company@example.com",
+    "username": "alice",
+    "password": "user_password"
+  }'
 ```
 
 #### C. Access Protected Endpoint
@@ -246,11 +278,14 @@ curl -X GET "http://127.0.0.1:8000/api/protected/me" \
 ```json
 {
   "id": 1,
-  "email": "user@example.com",
+  "tenant_id": 2,
+  "username": "company@example.com",
+  "email": "company@example.com",
+  "role": "OWNER",
   "is_totp_enabled": false,
   "is_active": true,
-  "created_at": "2024-12-26T...",
-  "updated_at": "2024-12-26T..."
+  "created_at": "2024-01-15T10:30:00Z",
+  "updated_at": "2024-01-15T10:30:00Z"
 }
 ```
 

@@ -7,11 +7,20 @@
 
 A production-ready FastAPI authentication service implementing OAuth 2.1 with full Model Context Protocol (MCP) compliance and **tenant-based multi-user architecture**.
 
-## 🚧 REFACTORING IN PROGRESS (40% Complete)
+## 🚧 REFACTORING IN PROGRESS (55% Complete)
 
 **This service is being refactored from single-user to tenant-based multi-user authentication.**
 
-**Current Status**: Database schema and core services complete. API endpoints pending.
+**Current Status**: ✅ Database, repositories, services complete. API endpoints and dependencies pending.
+
+**What's Complete**:
+- ✅ Tenant & User models with database migration
+- ✅ Tenant & User repositories with tenant-scoped queries
+- ✅ Tenant service with auto-creation logic
+- ✅ Auth & JWT services updated for multi-tenancy
+- ✅ 48 passing unit tests (23 tenant + 25 JWT)
+
+**Next**: Dependencies (tenant validation), integration tests, user invitation system
 
 See [docs/TENANT_REFACTORING.md](docs/TENANT_REFACTORING.md) for complete refactoring status and architecture changes.
 
@@ -19,7 +28,7 @@ See [docs/TENANT_REFACTORING.md](docs/TENANT_REFACTORING.md) for complete refact
 
 - 🏢 **Tenant-Based Authentication** - Multi-tenant architecture with auto-tenant creation
 - 🔐 **Secure Authentication** - Bcrypt password hashing for tenants and users
-- 👥 **Multi-User Support** - Users with roles (OWNER, ADMIN, MEMBER) within tenants
+- 👥 **Multi-User Ready** - User roles (OWNER, ADMIN, MEMBER), invitation system pending
 - 🎫 **JWT Tokens** - Short-lived access tokens (15 min) with refresh token rotation
 - 🔑 **TOTP 2FA** - Time-based One-Time Password authentication with QR code setup
 - 🌐 **MCP OAuth 2.1** - Full compliance with Model Context Protocol specifications
@@ -194,11 +203,11 @@ curl -X POST "http://127.0.0.1:8000/auth/totp/validate" \
 
 | Method | Endpoint | Description | Auth Required | Status |
 |--------|----------|-------------|---------------|--------|
-| POST | `/auth/login` | Login as tenant (auto-creates if new) | No | 🚧 Pending |
-| POST | `/auth/login-user` | Login as user within tenant | No | 🚧 Pending |
-| POST | `/auth/refresh` | Refresh access token | No | 🚧 Pending |
-| POST | `/auth/logout` | Logout and revoke token | No | 🚧 Pending |
-| POST | `/auth/register` | ⚠️ Deprecated - use `/auth/login` | No | ⚠️ Legacy |
+| POST | `/auth/login` | Login as tenant (auto-creates if new) | No | ✅ Complete |
+| POST | `/auth/login-user` | Login as user within tenant | No | ✅ Complete |
+| POST | `/auth/refresh` | Refresh access token | No | ✅ Complete |
+| POST | `/auth/logout` | Logout and revoke token | No | ✅ Complete |
+| POST | `/auth/register` | ⚠️ Deprecated - use `/auth/login` | No | ⚠️ Deprecated |
 
 ### TOTP/2FA
 

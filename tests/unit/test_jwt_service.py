@@ -20,6 +20,8 @@ class TestCreateAccessToken:
         token = jwt_service.create_access_token(
             user_id=1,
             email="test@example.com",
+            tenant_id=1,
+            role="OWNER",
         )
 
         assert isinstance(token, str)
@@ -30,6 +32,8 @@ class TestCreateAccessToken:
         token = jwt_service.create_access_token(
             user_id=123,
             email="user@example.com",
+            tenant_id=2,
+            role="MEMBER",
         )
 
         # Decode without verification to inspect payload
@@ -41,6 +45,8 @@ class TestCreateAccessToken:
 
         assert payload["sub"] == "123"
         assert payload["email"] == "user@example.com"
+        assert payload["tenant_id"] == "2"
+        assert payload["role"] == "MEMBER"
         assert "exp" in payload
         assert "iat" in payload
         assert payload["scopes"] == []
@@ -50,6 +56,8 @@ class TestCreateAccessToken:
         token = jwt_service.create_access_token(
             user_id=1,
             email="test@example.com",
+            tenant_id=1,
+            role="ADMIN",
             scopes=["read", "write", "admin"],
         )
 
@@ -66,6 +74,8 @@ class TestCreateAccessToken:
         token = jwt_service.create_access_token(
             user_id=1,
             email="test@example.com",
+            tenant_id=1,
+            role="OWNER",
             audience="https://api.example.com/resource",
         )
 
@@ -83,6 +93,8 @@ class TestCreateAccessToken:
         token = jwt_service.create_access_token(
             user_id=1,
             email="test@example.com",
+            tenant_id=1,
+            role="MEMBER",
         )
 
         payload = jwt.decode(
@@ -106,6 +118,8 @@ class TestCreateAccessToken:
         token = jwt_service.create_access_token(
             user_id=1,
             email="test@example.com",
+            tenant_id=1,
+            role="OWNER",
         )
 
         # Decode header to check algorithm
@@ -117,6 +131,8 @@ class TestCreateAccessToken:
         token = jwt_service.create_access_token(
             user_id=1,
             email="test@example.com",
+            tenant_id=1,
+            role="OWNER",
         )
 
         # Should not raise exception
@@ -130,8 +146,8 @@ class TestCreateAccessToken:
 
     def test_create_access_token_different_users(self):
         """Test that tokens for different users have different payloads."""
-        token1 = jwt_service.create_access_token(1, "user1@example.com")
-        token2 = jwt_service.create_access_token(2, "user2@example.com")
+        token1 = jwt_service.create_access_token(1, "user1@example.com", 1, "OWNER")
+        token2 = jwt_service.create_access_token(2, "user2@example.com", 1, "MEMBER")
 
         payload1 = jwt.decode(
             token1, settings.secret_key, algorithms=[settings.jwt_algorithm]
@@ -193,12 +209,16 @@ class TestDecodeAccessToken:
         token = jwt_service.create_access_token(
             user_id=1,
             email="test@example.com",
+            tenant_id=1,
+            role="OWNER",
         )
 
         payload = jwt_service.decode_access_token(token)
 
         assert payload["sub"] == "1"
         assert payload["email"] == "test@example.com"
+        assert payload["tenant_id"] == "1"
+        assert payload["role"] == "OWNER"
         assert "exp" in payload
         assert "iat" in payload
 
@@ -207,6 +227,8 @@ class TestDecodeAccessToken:
         token = jwt_service.create_access_token(
             user_id=1,
             email="test@example.com",
+            tenant_id=1,
+            role="MEMBER",
             scopes=["read", "write"],
         )
 
@@ -219,6 +241,8 @@ class TestDecodeAccessToken:
         token = jwt_service.create_access_token(
             user_id=1,
             email="test@example.com",
+            tenant_id=1,
+            role="ADMIN",
             audience="https://api.example.com",
         )
 
@@ -254,6 +278,8 @@ class TestDecodeAccessToken:
         token = jwt_service.create_access_token(
             user_id=1,
             email="test@example.com",
+            tenant_id=1,
+            role="OWNER",
         )
 
         # Tamper with token by changing last character
@@ -299,6 +325,8 @@ class TestJWTServiceIntegration:
         token = jwt_service.create_access_token(
             user_id=42,
             email="workflow@example.com",
+            tenant_id=5,
+            role="ADMIN",
             scopes=["read", "write"],
             audience="https://api.example.com",
         )
@@ -309,6 +337,8 @@ class TestJWTServiceIntegration:
         # Verify all fields
         assert payload["sub"] == "42"
         assert payload["email"] == "workflow@example.com"
+        assert payload["tenant_id"] == "5"
+        assert payload["role"] == "ADMIN"
         assert payload["scopes"] == ["read", "write"]
         assert payload["aud"] == "https://api.example.com"
 
@@ -317,6 +347,8 @@ class TestJWTServiceIntegration:
         access_token = jwt_service.create_access_token(
             user_id=1,
             email="test@example.com",
+            tenant_id=1,
+            role="OWNER",
         )
         refresh_token = jwt_service.create_refresh_token()
 
@@ -332,8 +364,8 @@ class TestJWTServiceIntegration:
 
     def test_multiple_users_workflow(self):
         """Test creating and decoding tokens for multiple users."""
-        user1_token = jwt_service.create_access_token(1, "user1@example.com")
-        user2_token = jwt_service.create_access_token(2, "user2@example.com")
+        user1_token = jwt_service.create_access_token(1, "user1@example.com", 1, "OWNER")
+        user2_token = jwt_service.create_access_token(2, "user2@example.com", 1, "MEMBER")
 
         user1_payload = jwt_service.decode_access_token(user1_token)
         user2_payload = jwt_service.decode_access_token(user2_token)
@@ -341,6 +373,8 @@ class TestJWTServiceIntegration:
         assert user1_payload["sub"] == "1"
         assert user2_payload["sub"] == "2"
         assert user1_payload["email"] != user2_payload["email"]
+        assert user1_payload["role"] == "OWNER"
+        assert user2_payload["role"] == "MEMBER"
 
     def test_token_expiration_workflow(self):
         """Test that token expiration is enforced."""
@@ -350,7 +384,7 @@ class TestJWTServiceIntegration:
             mock_settings.jwt_algorithm = settings.jwt_algorithm
             mock_settings.access_token_expire_seconds = 1  # 1 second
 
-            token = jwt_service.create_access_token(1, "test@example.com")
+            token = jwt_service.create_access_token(1, "test@example.com", 1, "OWNER")
 
             # Token should be valid immediately
             payload = jwt_service.decode_access_token(token)

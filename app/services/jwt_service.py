@@ -12,25 +12,27 @@ from app.core.exceptions import AuthenticationError
 def create_access_token(
     user_id: int,
     email: str,
+    tenant_id: int,
+    role: str,
     scopes: list[str] | None = None,
     audience: str | None = None,
-    tenant_id: int = 1,
 ) -> str:
     """
-    Create a JWT access token.
+    Create a JWT access token with tenant and role information.
 
     Args:
         user_id: User's ID
         email: User's email address
+        tenant_id: Tenant ID for multi-tenant isolation (required)
+        role: User's role (OWNER, ADMIN, MEMBER)
         scopes: Optional list of OAuth2 scopes
         audience: Optional OAuth2 audience (resource indicator)
-        tenant_id: Tenant ID for multi-tenant applications (defaults to 1 for shared tenant)
 
     Returns:
         Signed JWT token string
 
     Example:
-        >>> token = create_access_token(1, "user@example.com", ["read", "write"])
+        >>> token = create_access_token(1, "user@example.com", 2, "OWNER", ["read", "write"])
         >>> print(len(token) > 0)
         True
     """
@@ -41,6 +43,7 @@ def create_access_token(
         "sub": str(user_id),
         "email": email,
         "tenant_id": str(tenant_id),
+        "role": role,
         "exp": expires_at,
         "iat": now,
         "scopes": scopes or [],
