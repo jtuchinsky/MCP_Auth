@@ -1,5 +1,13 @@
 # MCP-Compatible Authentication Service - Implementation Plan
 
+## ⚠️ NOTE: This document describes the original single-user implementation
+
+**For the current tenant-based refactoring in progress, see [TENANT_REFACTORING.md](./TENANT_REFACTORING.md)**
+
+This document describes the original implementation plan for basic single-user authentication. The service is currently being refactored to support tenant-based multi-user authentication (40% complete).
+
+---
+
 ## Overview
 
 Build a production-ready FastAPI authentication service with:

@@ -2,20 +2,29 @@
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.126+-green.svg)](https://fastapi.tiangolo.com)
-[![Tests](https://img.shields.io/badge/tests-384%20passing-brightgreen.svg)](./tests)
+[![Tests](https://img.shields.io/badge/tests-407%20passing-brightgreen.svg)](./tests)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A production-ready FastAPI authentication service implementing OAuth 2.1 with full Model Context Protocol (MCP) compliance.
+A production-ready FastAPI authentication service implementing OAuth 2.1 with full Model Context Protocol (MCP) compliance and **tenant-based multi-user architecture**.
+
+## 🚧 REFACTORING IN PROGRESS (40% Complete)
+
+**This service is being refactored from single-user to tenant-based multi-user authentication.**
+
+**Current Status**: Database schema and core services complete. API endpoints pending.
+
+See [docs/TENANT_REFACTORING.md](docs/TENANT_REFACTORING.md) for complete refactoring status and architecture changes.
 
 ## Features
 
-- 🔐 **Secure Authentication** - User registration and login with bcrypt password hashing
+- 🏢 **Tenant-Based Authentication** - Multi-tenant architecture with auto-tenant creation
+- 🔐 **Secure Authentication** - Bcrypt password hashing for tenants and users
+- 👥 **Multi-User Support** - Users with roles (OWNER, ADMIN, MEMBER) within tenants
 - 🎫 **JWT Tokens** - Short-lived access tokens (15 min) with refresh token rotation
 - 🔑 **TOTP 2FA** - Time-based One-Time Password authentication with QR code setup
-- 🏢 **Multi-Tenancy Ready** - Built-in tenant isolation via JWT `tenant_id` claims (opt-in)
 - 🌐 **MCP OAuth 2.1** - Full compliance with Model Context Protocol specifications
 - 👤 **User Management** - Protected endpoints for profile management
-- ✅ **Comprehensive Testing** - 384 passing tests (325 unit + 59 integration)
+- ✅ **Comprehensive Testing** - 407 passing tests (348 unit + 59 integration)
 - 📚 **Interactive API Docs** - Swagger UI and ReDoc included
 
 ## Quick Start
@@ -56,29 +65,51 @@ Once the server is running, visit:
 - **Swagger UI**: http://127.0.0.1:8000/docs
 - **ReDoc**: http://127.0.0.1:8000/redoc
 
-## Usage Examples
+## Architecture Overview
 
-### 1. Register a New User
+### Tenant-Based Authentication
 
-```bash
-curl -X POST "http://127.0.0.1:8000/auth/register" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "user@example.com",
-    "password": "securepassword123"
-  }'
+This service implements a **tenant-first authentication model**:
+
+1. **Tenants** are identified by globally unique email addresses with their own passwords
+2. **Users** belong to tenants and have usernames unique within their tenant
+3. **First login** with a new email automatically creates a tenant + owner user
+4. **Owner users** have the same credentials as their tenant and role=OWNER
+5. **Additional users** can be invited by tenant owners (future feature)
+
+### Authentication Flow
+
+```
+POST /auth/login (tenant_email, password)
+  ↓
+  Look up Tenant by email
+  ↓
+  ┌─────────────────┬─────────────────┐
+  │ NOT FOUND       │ FOUND           │
+  ├─────────────────┼─────────────────┤
+  │ Create Tenant   │ Verify Password │
+  │ Create Owner    │ Get Owner User  │
+  │ Return Tokens   │ Return Tokens   │
+  └─────────────────┴─────────────────┘
 ```
 
-### 2. Login
+## Usage Examples
+
+### 1. First Login (Auto-Creates Tenant + Owner)
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/auth/login" \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "user@example.com",
+    "tenant_email": "company@example.com",
     "password": "securepassword123"
   }'
 ```
+
+**What happens**:
+- New tenant created with email `company@example.com`
+- Owner user created with same credentials, role=OWNER
+- Returns JWT tokens for owner user
 
 Response:
 ```json
@@ -90,11 +121,50 @@ Response:
 }
 ```
 
+JWT Payload includes:
+```json
+{
+  "sub": "1",
+  "email": "company@example.com",
+  "tenant_id": "2",
+  "role": "OWNER",
+  "exp": 1735689600
+}
+```
+
+### 2. Subsequent Login (Existing Tenant)
+
+```bash
+curl -X POST "http://127.0.0.1:8000/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenant_email": "company@example.com",
+    "password": "securepassword123"
+  }'
+```
+
+**What happens**:
+- Tenant found, password verified
+- Returns JWT tokens for existing owner user
+
 ### 3. Access Protected Endpoint
 
 ```bash
 curl -X GET "http://127.0.0.1:8000/api/protected/me" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
+```
+
+Response includes tenant and role information:
+```json
+{
+  "id": 1,
+  "tenant_id": 2,
+  "username": "company@example.com",
+  "email": "company@example.com",
+  "role": "OWNER",
+  "is_totp_enabled": false,
+  "is_active": true
+}
 ```
 
 ### 4. Setup TOTP 2FA
@@ -122,12 +192,13 @@ curl -X POST "http://127.0.0.1:8000/auth/totp/validate" \
 
 ### Authentication
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| POST | `/auth/register` | Create new user account | No |
-| POST | `/auth/login` | Login (users without TOTP) | No |
-| POST | `/auth/refresh` | Refresh access token | No |
-| POST | `/auth/logout` | Logout and revoke token | No |
+| Method | Endpoint | Description | Auth Required | Status |
+|--------|----------|-------------|---------------|--------|
+| POST | `/auth/login` | Login as tenant (auto-creates if new) | No | 🚧 Pending |
+| POST | `/auth/login-user` | Login as user within tenant | No | 🚧 Pending |
+| POST | `/auth/refresh` | Refresh access token | No | 🚧 Pending |
+| POST | `/auth/logout` | Logout and revoke token | No | 🚧 Pending |
+| POST | `/auth/register` | ⚠️ Deprecated - use `/auth/login` | No | ⚠️ Legacy |
 
 ### TOTP/2FA
 
@@ -164,8 +235,8 @@ pytest tests/unit/
 pytest tests/integration/
 ```
 
-**Test Coverage**: 384 passing tests
-- Unit Tests: 325 tests (security, JWT, TOTP, auth service)
+**Test Coverage**: 407 passing tests
+- Unit Tests: 348 tests (security, JWT, TOTP, auth service, tenant repository, tenant service)
 - Integration Tests: 59 tests (auth endpoints, TOTP flows, protected routes)
 
 ## Architecture
@@ -187,9 +258,30 @@ Models (Database)
 - **FastAPI** - Modern, high-performance web framework
 - **SQLAlchemy 2.0** - Database ORM with Alembic migrations
 - **PyJWT** - JSON Web Token implementation
-- **bcrypt** - Secure password hashing
+- **bcrypt** - Secure password hashing (12 rounds)
 - **pyotp** - TOTP/2FA implementation
 - **Pydantic** - Data validation and settings management
+
+### Database Schema
+
+**Tenants Table** (NEW):
+- `id` - Auto-incremented primary key
+- `email` - Globally unique, identifies tenant
+- `password_hash` - Bcrypt hashed password
+- `is_active` - Tenant status
+- `created_at`, `updated_at` - Timestamps
+
+**Users Table** (UPDATED):
+- `id` - Auto-incremented primary key (global)
+- `tenant_id` - Foreign key to tenants (with cascade delete)
+- `username` - Unique per tenant
+- `email` - Globally unique (for notifications/invitations)
+- `password_hash` - Bcrypt hashed password
+- `role` - OWNER, ADMIN, or MEMBER
+- `is_totp_enabled`, `totp_secret` - 2FA fields
+- `is_active` - User status
+
+**Composite Unique Constraint**: `(tenant_id, username)` ensures usernames are unique within each tenant.
 
 ## MCP OAuth 2.1 Compliance
 
@@ -204,13 +296,16 @@ This service implements the following OAuth 2.1 features:
 
 ## Security Features
 
-- **Password Security**: bcrypt hashing with automatic salts
-- **JWT Tokens**: HS256 signing with configurable expiration
-- **Multi-Tenancy**: Built-in `tenant_id` claims for tenant isolation (defaults to tenant 1)
+- **Password Security**: bcrypt hashing (12 rounds) with automatic salts for both tenants and users
+- **JWT Tokens**: HS256 signing with configurable expiration, includes `tenant_id` and `role` claims
+- **Tenant Isolation**: All users belong to a tenant, enforced at database and JWT level
+- **Role-Based Access**: OWNER, ADMIN, MEMBER roles for authorization
 - **Refresh Tokens**: Database-backed with rotation and revocation
 - **TOTP/2FA**: RFC 6238 compliant with QR code generation
 - **Input Validation**: Comprehensive Pydantic schema validation
 - **SQL Injection Protection**: SQLAlchemy ORM parameterization
+- **Email Normalization**: All emails normalized to lowercase for consistency
+- **Case-Insensitive Lookups**: Tenant authentication is case-insensitive
 
 ## Configuration
 
@@ -236,17 +331,35 @@ MCP_Auth/
 ├── app/
 │   ├── core/          # Security utilities and exceptions
 │   ├── models/        # SQLAlchemy ORM models
+│   │   ├── tenant.py      # NEW: Tenant model
+│   │   ├── user.py        # UPDATED: Added tenant_id, username, role
+│   │   └── token.py       # RefreshToken model
 │   ├── repositories/  # Database operations
+│   │   ├── tenant_repository.py  # NEW: Tenant CRUD
+│   │   ├── user_repository.py    # UPDATED: Tenant-scoped queries
+│   │   └── token_repository.py   # Token CRUD
 │   ├── routes/        # API endpoints
 │   ├── schemas/       # Pydantic models
 │   ├── services/      # Business logic
+│   │   ├── tenant_service.py  # NEW: Tenant auth with auto-creation
+│   │   ├── auth_service.py    # PENDING: Needs tenant_id updates
+│   │   ├── jwt_service.py     # PENDING: Needs role parameter
+│   │   └── totp_service.py    # TOTP/2FA logic
 │   ├── config.py      # Settings management
 │   ├── database.py    # Database setup
 │   └── dependencies.py # FastAPI dependencies
 ├── alembic/           # Database migrations
+│   └── versions/
+│       └── e9258cf92b4d_add_tenant_based_authentication.py  # NEW
 ├── tests/             # Test suite
 │   ├── unit/          # Unit tests
+│   │   ├── test_tenant_repository.py  # NEW: 13 tests
+│   │   └── test_tenant_service.py     # NEW: 10 tests
 │   └── integration/   # Integration tests
+├── docs/
+│   ├── TENANT_REFACTORING.md  # NEW: Refactoring status
+│   ├── RUNNING.md
+│   └── PLAN.md
 ├── main.py            # FastAPI application
 └── pyproject.toml     # Project configuration
 ```
@@ -323,8 +436,11 @@ uv sync --extra dev
 
 ## Documentation
 
+- **Refactoring Status**: See [docs/TENANT_REFACTORING.md](./docs/TENANT_REFACTORING.md) - **READ THIS FIRST**
+- **Database Schema**: See [docs/SCHEMAS.md](./docs/SCHEMAS.md) - Complete schema documentation
 - **Developer Guide**: See [CLAUDE.md](./CLAUDE.md)
-- **Implementation Plan**: See [docs/PLAN.md](./docs/PLAN.md)
+- **Quick Start**: See [docs/RUNNING.md](./docs/RUNNING.md)
+- **Original Implementation Plan**: See [docs/PLAN.md](./docs/PLAN.md)
 - **API Documentation**: http://127.0.0.1:8000/docs (when running)
 
 ## Contributing

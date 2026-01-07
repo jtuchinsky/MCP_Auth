@@ -5,26 +5,39 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 
 
-def create(db: Session, email: str, password_hash: str) -> User:
+def create(
+    db: Session,
+    tenant_id: int,
+    username: str,
+    email: str,
+    password_hash: str,
+    role: str = "MEMBER",
+) -> User:
     """
-    Create a new user.
+    Create a new user within a tenant.
 
     Args:
         db: Database session
-        email: User's email address
+        tenant_id: Tenant's ID
+        username: User's username (unique per tenant)
+        email: User's email address (globally unique)
         password_hash: Hashed password
+        role: User's role (OWNER, ADMIN, MEMBER). Defaults to MEMBER.
 
     Returns:
         Created User instance
 
     Example:
-        >>> user = create(db, "user@example.com", "hashed_password")
-        >>> print(user.email)
-        user@example.com
+        >>> user = create(db, tenant_id=1, username="alice", email="alice@example.com", password_hash="hashed", role="MEMBER")
+        >>> print(user.username)
+        alice
     """
     user = User(
+        tenant_id=tenant_id,
+        username=username,
         email=email,
         password_hash=password_hash,
+        role=role,
     )
     db.add(user)
     db.commit()
@@ -174,3 +187,99 @@ def update_profile(
     db.commit()
     db.refresh(user)
     return user
+
+
+def get_by_tenant_and_username(db: Session, tenant_id: int, username: str) -> User | None:
+    """
+    Get user by tenant ID and username.
+
+    Args:
+        db: Database session
+        tenant_id: Tenant's ID
+        username: User's username
+
+    Returns:
+        User instance if found, None otherwise
+
+    Example:
+        >>> user = get_by_tenant_and_username(db, tenant_id=1, username="alice")
+        >>> if user:
+        ...     print(f"Found user {user.email} in tenant {user.tenant_id}")
+    """
+    return (
+        db.query(User)
+        .filter(User.tenant_id == tenant_id, User.username == username)
+        .first()
+    )
+
+
+def get_tenant_owner(db: Session, tenant_id: int) -> User | None:
+    """
+    Get the owner (first user with OWNER role) of a tenant.
+
+    Args:
+        db: Database session
+        tenant_id: Tenant's ID
+
+    Returns:
+        User instance with OWNER role, or None if not found
+
+    Example:
+        >>> owner = get_tenant_owner(db, tenant_id=1)
+        >>> if owner:
+        ...     print(f"Owner: {owner.email}")
+    """
+    return (
+        db.query(User)
+        .filter(User.tenant_id == tenant_id, User.role == "OWNER")
+        .first()
+    )
+
+
+def list_by_tenant(db: Session, tenant_id: int, skip: int = 0, limit: int = 100) -> list[User]:
+    """
+    List all users in a tenant with pagination.
+
+    Args:
+        db: Database session
+        tenant_id: Tenant's ID
+        skip: Number of records to skip
+        limit: Maximum number of records to return
+
+    Returns:
+        List of User instances in the tenant
+
+    Example:
+        >>> users = list_by_tenant(db, tenant_id=1, skip=0, limit=10)
+        >>> for user in users:
+        ...     print(f"{user.username} - {user.role}")
+    """
+    return (
+        db.query(User)
+        .filter(User.tenant_id == tenant_id)
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
+
+def count_tenant_users(db: Session, tenant_id: int) -> int:
+    """
+    Count active users in a tenant.
+
+    Args:
+        db: Database session
+        tenant_id: Tenant's ID
+
+    Returns:
+        Number of active users in the tenant
+
+    Example:
+        >>> count = count_tenant_users(db, tenant_id=1)
+        >>> print(f"Tenant has {count} users")
+    """
+    return (
+        db.query(User)
+        .filter(User.tenant_id == tenant_id, User.is_active == True)
+        .count()
+    )
