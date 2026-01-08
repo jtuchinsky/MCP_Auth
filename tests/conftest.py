@@ -6,8 +6,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.database import Base, get_db
+from app.models.tenant import Tenant
 from app.models.token import RefreshToken  # noqa: F401 - Import to register with Base
 from app.models.user import User
+from app.repositories import tenant_repository
 from app.services import auth_service, jwt_service, totp_service
 from main import app
 
@@ -98,12 +100,38 @@ def client(test_db, db_session: Session):
 
 
 @pytest.fixture(scope="function")
-def test_user(db_session: Session) -> User:
+def test_tenant(db_session: Session) -> Tenant:
+    """
+    Create a test tenant.
+
+    Args:
+        db_session: Test database session
+
+    Returns:
+        Tenant: Test tenant instance
+
+    Example:
+        >>> def test_with_tenant(test_tenant):
+        >>>     assert test_tenant.email == "testtenant@example.com"
+    """
+    from app.core.security import hash_password
+
+    tenant = tenant_repository.create(
+        db=db_session,
+        email="testtenant@example.com",
+        password_hash=hash_password("tenantpassword123"),
+    )
+    return tenant
+
+
+@pytest.fixture(scope="function")
+def test_user(db_session: Session, test_tenant: Tenant) -> User:
     """
     Create a test user without TOTP.
 
     Args:
         db_session: Test database session
+        test_tenant: Test tenant instance
 
     Returns:
         User: Test user instance
@@ -118,19 +146,23 @@ def test_user(db_session: Session) -> User:
     """
     user = auth_service.register_user(
         db=db_session,
+        tenant_id=test_tenant.id,
+        username="testuser",
         email="testuser@example.com",
         password="password123",
+        role="MEMBER",
     )
     return user
 
 
 @pytest.fixture(scope="function")
-def test_user_with_totp(db_session: Session) -> User:
+def test_user_with_totp(db_session: Session, test_tenant: Tenant) -> User:
     """
     Create a test user with TOTP enabled.
 
     Args:
         db_session: Test database session
+        test_tenant: Test tenant instance
 
     Returns:
         User: Test user instance with TOTP enabled
@@ -143,8 +175,11 @@ def test_user_with_totp(db_session: Session) -> User:
     # Create user
     user = auth_service.register_user(
         db=db_session,
+        tenant_id=test_tenant.id,
+        username="totpuser",
         email="totpuser@example.com",
         password="password123",
+        role="MEMBER",
     )
 
     # Generate and set TOTP secret
@@ -179,6 +214,8 @@ def access_token(test_user: User) -> str:
     token = jwt_service.create_access_token(
         user_id=test_user.id,
         email=test_user.email,
+        tenant_id=test_user.tenant_id,
+        role=test_user.role,
     )
     return token
 

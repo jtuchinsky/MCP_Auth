@@ -7,20 +7,24 @@
 
 A production-ready FastAPI authentication service implementing OAuth 2.1 with full Model Context Protocol (MCP) compliance and **tenant-based multi-user architecture**.
 
-## 🚧 REFACTORING IN PROGRESS (55% Complete)
+## 🚧 REFACTORING IN PROGRESS (75% Complete)
 
 **This service is being refactored from single-user to tenant-based multi-user authentication.**
 
-**Current Status**: ✅ Database, repositories, services complete. API endpoints and dependencies pending.
+**Current Status**: ✅ Database, repositories, services, schemas, routes, and dependencies complete. Tests pending.
 
 **What's Complete**:
 - ✅ Tenant & User models with database migration
 - ✅ Tenant & User repositories with tenant-scoped queries
 - ✅ Tenant service with auto-creation logic
 - ✅ Auth & JWT services updated for multi-tenancy
+- ✅ API schemas with tenant support (TenantLoginRequest, etc.)
+- ✅ API routes with tenant-based authentication
+- ✅ Dependencies with tenant isolation & role-based auth
 - ✅ 48 passing unit tests (23 tenant + 25 JWT)
+- ✅ End-to-end tenant authentication working
 
-**Next**: Dependencies (tenant validation), integration tests, user invitation system
+**Next**: Update existing tests for tenant support, user invitation system
 
 See [docs/TENANT_REFACTORING.md](docs/TENANT_REFACTORING.md) for complete refactoring status and architecture changes.
 
