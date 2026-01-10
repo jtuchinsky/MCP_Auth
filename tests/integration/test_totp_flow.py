@@ -40,6 +40,8 @@ class TestTOTPSetup:
         access_token = jwt_service.create_access_token(
             user_id=test_user_with_totp.id,
             email=test_user_with_totp.email,
+            tenant_id=test_user_with_totp.tenant_id,
+            role=test_user_with_totp.role,
         )
 
         response = client.post(
@@ -243,14 +245,15 @@ class TestTOTPFlows:
     """Test complete TOTP authentication flows."""
 
     def test_complete_totp_setup_flow(
-        self, client: TestClient, test_user: User, db_session: Session
+        self, client: TestClient, test_user: User, test_tenant, db_session: Session
     ):
         """Test complete flow: login → setup TOTP → verify → logout → login with TOTP."""
-        # Step 1: Login without TOTP
+        # Step 1: Login without TOTP (use /auth/login-user for non-owner users)
         login_response = client.post(
-            "/auth/login",
+            "/auth/login-user",
             json={
-                "email": test_user.email,
+                "tenant_email": test_tenant.email,
+                "username": test_user.username,
                 "password": "password123",
             },
         )
@@ -282,11 +285,12 @@ class TestTOTPFlows:
         )
         assert logout_response.status_code == 204
 
-        # Step 5: Try regular login (should fail)
+        # Step 5: Try regular login (should fail because TOTP is now required)
         regular_login = client.post(
-            "/auth/login",
+            "/auth/login-user",
             json={
-                "email": test_user.email,
+                "tenant_email": test_tenant.email,
+                "username": test_user.username,
                 "password": "password123",
             },
         )

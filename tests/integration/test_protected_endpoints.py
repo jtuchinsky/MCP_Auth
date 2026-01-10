@@ -83,6 +83,8 @@ class TestGetMeEndpoint:
         access_token = jwt_service.create_access_token(
             user_id=test_user_with_totp.id,
             email=test_user_with_totp.email,
+            tenant_id=test_user_with_totp.tenant_id,
+            role=test_user_with_totp.role,
         )
 
         response = client.get(
@@ -114,7 +116,7 @@ class TestUpdateProfileEndpoint:
         assert data["id"] == test_user.id
 
     def test_update_profile_password(
-        self, authenticated_client: TestClient, test_user: User, client: TestClient
+        self, authenticated_client: TestClient, test_user: User, test_tenant, client: TestClient
     ):
         """Test updating user password."""
         response = authenticated_client.patch(
@@ -124,11 +126,12 @@ class TestUpdateProfileEndpoint:
 
         assert response.status_code == 200
 
-        # Verify new password works
+        # Verify new password works (use /auth/login-user for non-owner users)
         login_response = client.post(
-            "/auth/login",
+            "/auth/login-user",
             json={
-                "email": test_user.email,
+                "tenant_email": test_tenant.email,
+                "username": test_user.username,
                 "password": "newpassword456",
             },
         )
@@ -136,16 +139,17 @@ class TestUpdateProfileEndpoint:
 
         # Verify old password doesn't work
         old_login_response = client.post(
-            "/auth/login",
+            "/auth/login-user",
             json={
-                "email": test_user.email,
+                "tenant_email": test_tenant.email,
+                "username": test_user.username,
                 "password": "password123",
             },
         )
         assert old_login_response.status_code == 401
 
     def test_update_profile_email_and_password(
-        self, authenticated_client: TestClient, client: TestClient
+        self, authenticated_client: TestClient, test_user: User, test_tenant, client: TestClient
     ):
         """Test updating both email and password."""
         response = authenticated_client.patch(
@@ -160,11 +164,12 @@ class TestUpdateProfileEndpoint:
         data = response.json()
         assert data["email"] == "updated@example.com"
 
-        # Verify login with new credentials
+        # Verify login with new credentials (use /auth/login-user for non-owner users)
         login_response = client.post(
-            "/auth/login",
+            "/auth/login-user",
             json={
-                "email": "updated@example.com",
+                "tenant_email": test_tenant.email,
+                "username": test_user.username,
                 "password": "updatedpass123",
             },
         )
@@ -210,11 +215,11 @@ class TestUpdateProfileEndpoint:
         self, authenticated_client: TestClient, client: TestClient
     ):
         """Test updating to an email that already exists."""
-        # Create another user
+        # Create another tenant/user via login
         client.post(
-            "/auth/register",
+            "/auth/login",
             json={
-                "email": "existing@example.com",
+                "tenant_email": "existing@example.com",
                 "password": "password123",
             },
         )
@@ -233,29 +238,19 @@ class TestProtectedEndpointFlows:
     """Test complete flows involving protected endpoints."""
 
     def test_login_access_update_flow(self, client: TestClient):
-        """Test complete flow: register → login → access profile → update profile."""
-        # Step 1: Register
-        register_response = client.post(
-            "/auth/register",
-            json={
-                "email": "flowtest@example.com",
-                "password": "password123",
-            },
-        )
-        assert register_response.status_code == 201
-
-        # Step 2: Login
+        """Test complete flow: login (auto-create) → access profile → update profile."""
+        # Step 1: Login (auto-creates tenant + owner)
         login_response = client.post(
             "/auth/login",
             json={
-                "email": "flowtest@example.com",
+                "tenant_email": "flowtest@example.com",
                 "password": "password123",
             },
         )
         assert login_response.status_code == 200
         access_token = login_response.json()["access_token"]
 
-        # Step 3: Access profile
+        # Step 2: Access profile
         me_response = client.get(
             "/api/protected/me",
             headers={"Authorization": f"Bearer {access_token}"},
@@ -263,7 +258,7 @@ class TestProtectedEndpointFlows:
         assert me_response.status_code == 200
         assert me_response.json()["email"] == "flowtest@example.com"
 
-        # Step 4: Update profile
+        # Step 3: Update profile
         update_response = client.patch(
             "/api/protected/profile",
             headers={"Authorization": f"Bearer {access_token}"},
@@ -272,7 +267,7 @@ class TestProtectedEndpointFlows:
         assert update_response.status_code == 200
         assert update_response.json()["email"] == "updated-flowtest@example.com"
 
-        # Step 5: Verify update in /me
+        # Step 4: Verify update in /me
         final_me_response = client.get(
             "/api/protected/me",
             headers={"Authorization": f"Bearer {access_token}"},

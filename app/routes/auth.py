@@ -11,55 +11,10 @@ from app.repositories import token_repository, user_repository, tenant_repositor
 from app.schemas.auth import LoginRequest, RefreshRequest, TokenResponse
 from app.schemas.tenant import TenantLoginRequest, TenantUserLoginRequest
 from app.schemas.totp import TOTPSetupResponse, TOTPValidateRequest, TOTPVerifyRequest
-from app.schemas.user import UserCreate, UserResponse
+from app.schemas.user import UserResponse
 from app.services import auth_service, tenant_service, totp_service
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
-
-
-@router.post(
-    "/register",
-    response_model=UserResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="[DEPRECATED] Register a new user",
-    description="⚠️ DEPRECATED: Use /auth/login instead. Tenants are created automatically on first login.",
-    deprecated=True,
-)
-async def register(
-    user_data: UserCreate,
-    db: Session = Depends(get_db),
-) -> UserResponse:
-    """
-    Register a new user.
-
-    **⚠️ DEPRECATED**: This endpoint is deprecated in favor of tenant-based authentication.
-    Use `/auth/login` instead - tenants and owner users are created automatically on first login.
-
-    Args:
-        user_data: User registration data (tenant_id, username, email, password, role)
-        db: Database session
-
-    Returns:
-        UserResponse with user details
-
-    Raises:
-        HTTPException 400: If user already exists
-    """
-    try:
-        user = auth_service.register_user(
-            db=db,
-            tenant_id=user_data.tenant_id,
-            username=user_data.username,
-            email=user_data.email,
-            password=user_data.password,
-            role=user_data.role,
-        )
-        return UserResponse.model_validate(user)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
 
 
 @router.post(
