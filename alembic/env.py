@@ -30,7 +30,7 @@ if config.config_file_name is not None:
 # This ensures Alembic can detect all tables for autogeneration
 try:
     # Import models here so they register with Base.metadata
-    from app.models import user, token  # noqa: F401
+    from app.models import tenant, user, token  # noqa: F401
 except ImportError:
     # Models might not exist yet during initial setup
     pass
