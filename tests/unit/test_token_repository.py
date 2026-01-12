@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import Base, SessionLocal, engine
 from app.models.user import User
-from app.repositories import token_repository, user_repository
+from app.repositories import tenant_repository, token_repository, user_repository
 
 
 @pytest.fixture
@@ -30,10 +30,22 @@ def db_session(test_db):
 
 
 @pytest.fixture
-def test_user(db_session: Session) -> User:
+def test_tenant(db_session: Session):
+    """Create a test tenant for token tests."""
+    return tenant_repository.create(
+        db=db_session,
+        email="token_tenant@example.com",
+        password_hash="tenant_hash_123",
+    )
+
+
+@pytest.fixture
+def test_user(db_session: Session, test_tenant) -> User:
     """Create a test user for token tests."""
     return user_repository.create(
         db=db_session,
+        tenant_id=test_tenant.id,
+        username="tokenuser",
         email="token_test@example.com",
         password_hash="hashed_password",
     )
@@ -272,17 +284,25 @@ class TestRevokeAllUserTokens:
         assert token3.is_revoked is True
 
     def test_revoke_all_user_tokens_does_not_affect_other_users(
-        self, db_session: Session
+        self, db_session: Session, test_tenant
     ):
         """Test that revoking tokens for one user doesn't affect other users."""
         expires_at = datetime.now(timezone.utc) + timedelta(days=7)
 
         # Create two users
         user1 = user_repository.create(
-            db=db_session, email="user1@example.com", password_hash="hash1"
+            db=db_session,
+            tenant_id=test_tenant.id,
+            username="user1",
+            email="user1@example.com",
+            password_hash="hash1",
         )
         user2 = user_repository.create(
-            db=db_session, email="user2@example.com", password_hash="hash2"
+            db=db_session,
+            tenant_id=test_tenant.id,
+            username="user2",
+            email="user2@example.com",
+            password_hash="hash2",
         )
 
         # Create tokens for both users
@@ -310,11 +330,15 @@ class TestRevokeAllUserTokens:
         user2_token = token_repository.get_by_token(db_session, "user2_token")
         assert user2_token.is_revoked is False
 
-    def test_revoke_all_user_tokens_with_no_tokens(self, db_session: Session):
+    def test_revoke_all_user_tokens_with_no_tokens(self, db_session: Session, test_tenant):
         """Test revoking tokens for user with no tokens doesn't error."""
         # Create user with no tokens
         user = user_repository.create(
-            db=db_session, email="no_tokens@example.com", password_hash="hash"
+            db=db_session,
+            tenant_id=test_tenant.id,
+            username="notokensuser",
+            email="no_tokens@example.com",
+            password_hash="hash",
         )
 
         # Should not raise error
@@ -358,13 +382,17 @@ class TestTokenRepositoryIntegration:
         revoked = token_repository.get_by_token(db_session, "lifecycle_token")
         assert revoked.is_revoked is True
 
-    def test_user_logout_scenario(self, db_session: Session):
+    def test_user_logout_scenario(self, db_session: Session, test_tenant):
         """Test user logout scenario: revoke all tokens."""
         expires_at = datetime.now(timezone.utc) + timedelta(days=7)
 
         # Create user
         user = user_repository.create(
-            db=db_session, email="logout@example.com", password_hash="hash"
+            db=db_session,
+            tenant_id=test_tenant.id,
+            username="logoutuser",
+            email="logout@example.com",
+            password_hash="hash",
         )
 
         # Create multiple sessions (tokens)

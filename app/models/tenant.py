@@ -24,6 +24,7 @@ class Tenant(Base):
     Attributes:
         id: Primary key
         email: Tenant's email address (globally unique, indexed)
+        tenant_name: Tenant's organization name (optional)
         password_hash: Bcrypt hashed password for tenant authentication
         is_active: Whether the tenant account is active
         created_at: Timestamp when tenant was created
@@ -42,6 +43,10 @@ class Tenant(Base):
         unique=True,
         index=True,
         nullable=False,
+    )
+    tenant_name: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
     )
     password_hash: Mapped[str] = mapped_column(
         String(255),
@@ -77,4 +82,4 @@ class Tenant(Base):
 
     def __repr__(self) -> str:
         """String representation of Tenant."""
-        return f"<Tenant(id={self.id}, email='{self.email}', is_active={self.is_active})>"
+        return f"<Tenant(id={self.id}, name='{self.tenant_name}', email='{self.email}', is_active={self.is_active})>"

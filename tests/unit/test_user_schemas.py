@@ -4,9 +4,41 @@ from datetime import datetime, timezone
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy.orm import Session
 
+from app.database import Base, SessionLocal, engine
 from app.models.user import User
+from app.repositories import tenant_repository
 from app.schemas.user import UserCreate, UserResponse, UserUpdate
+
+
+@pytest.fixture
+def test_db():
+    """Create a test database and clean it up after tests."""
+    Base.metadata.create_all(bind=engine)
+    yield
+    Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture
+def db_session(test_db):
+    """Provide a database session for tests."""
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.rollback()
+        session.close()
+
+
+@pytest.fixture
+def test_tenant(db_session: Session):
+    """Create a test tenant for schema tests."""
+    return tenant_repository.create(
+        db=db_session,
+        email="schemas_tenant@example.com",
+        password_hash="tenant_hash_123",
+    )
 
 
 class TestUserCreate:
@@ -15,13 +47,19 @@ class TestUserCreate:
     def test_user_create_valid(self):
         """Test creating UserCreate with valid data."""
         data = {
+            "tenant_id": 1,
+            "username": "testuser",
             "email": "user@example.com",
             "password": "secure_password_123",
+            "role": "MEMBER",
         }
         user = UserCreate(**data)
 
+        assert user.tenant_id == 1
+        assert user.username == "testuser"
         assert user.email == "user@example.com"
         assert user.password == "secure_password_123"
+        assert user.role == "MEMBER"
 
     def test_user_create_valid_email_formats(self):
         """Test various valid email formats."""
@@ -34,7 +72,13 @@ class TestUserCreate:
         ]
 
         for email in valid_emails:
-            user = UserCreate(email=email, password="password123")
+            user = UserCreate(
+                tenant_id=1,
+                username="testuser",
+                email=email,
+                password="password123",
+                role="MEMBER",
+            )
             assert user.email == email
 
     def test_user_create_invalid_email(self):
@@ -49,44 +93,90 @@ class TestUserCreate:
 
         for email in invalid_emails:
             with pytest.raises(ValidationError):
-                UserCreate(email=email, password="password123")
+                UserCreate(
+                    tenant_id=1,
+                    username="testuser",
+                    email=email,
+                    password="password123",
+                    role="MEMBER",
+                )
 
     def test_user_create_password_min_length(self):
         """Test that password must be at least 8 characters."""
         # Valid 8-character password
-        user = UserCreate(email="user@example.com", password="12345678")
+        user = UserCreate(
+            tenant_id=1,
+            username="testuser",
+            email="user@example.com",
+            password="12345678",
+            role="MEMBER",
+        )
         assert len(user.password) == 8
 
         # Too short password
         with pytest.raises(ValidationError):
-            UserCreate(email="user@example.com", password="1234567")
+            UserCreate(
+                tenant_id=1,
+                username="testuser",
+                email="user@example.com",
+                password="1234567",
+                role="MEMBER",
+            )
 
     def test_user_create_password_max_length(self):
         """Test that password has maximum length of 100 characters."""
         # Valid 100-character password
         password_100 = "a" * 100
-        user = UserCreate(email="user@example.com", password=password_100)
+        user = UserCreate(
+            tenant_id=1,
+            username="testuser",
+            email="user@example.com",
+            password=password_100,
+            role="MEMBER",
+        )
         assert len(user.password) == 100
 
         # Too long password
         password_101 = "a" * 101
         with pytest.raises(ValidationError):
-            UserCreate(email="user@example.com", password=password_101)
+            UserCreate(
+                tenant_id=1,
+                username="testuser",
+                email="user@example.com",
+                password=password_101,
+                role="MEMBER",
+            )
 
     def test_user_create_missing_email(self):
         """Test that email is required."""
         with pytest.raises(ValidationError):
-            UserCreate(password="password123")
+            UserCreate(
+                tenant_id=1,
+                username="testuser",
+                password="password123",
+                role="MEMBER",
+            )
 
     def test_user_create_missing_password(self):
         """Test that password is required."""
         with pytest.raises(ValidationError):
-            UserCreate(email="user@example.com")
+            UserCreate(
+                tenant_id=1,
+                username="testuser",
+                email="user@example.com",
+                role="MEMBER",
+            )
 
     def test_user_create_empty_password(self):
         """Test that empty password is invalid."""
         with pytest.raises(ValidationError):
-            UserCreate(email="user@example.com", password="")
+            UserCreate(
+                tenant_id=1,
+                username="testuser",
+                email="user@example.com",
+                password="",
+                role="MEMBER",
+            )
 
     def test_user_create_special_characters_in_password(self):
         """Test password with special characters."""
@@ -99,25 +189,47 @@ class TestUserCreate:
         ]
 
         for password in passwords:
-            user = UserCreate(email="user@example.com", password=password)
+            user = UserCreate(
+                tenant_id=1,
+                username="testuser",
+                email="user@example.com",
+                password=password,
+                role="MEMBER",
+            )
             assert user.password == password
 
     def test_user_create_model_dump(self):
         """Test serializing UserCreate to dict."""
-        user = UserCreate(email="user@example.com", password="password123")
+        user = UserCreate(
+            tenant_id=1,
+            username="testuser",
+            email="user@example.com",
+            password="password123",
+            role="MEMBER",
+        )
         data = user.model_dump()
 
         assert data == {
+            "tenant_id": 1,
+            "username": "testuser",
             "email": "user@example.com",
             "password": "password123",
+            "role": "MEMBER",
         }
 
     def test_user_create_model_dump_json(self):
         """Test serializing UserCreate to JSON."""
-        user = UserCreate(email="user@example.com", password="password123")
+        user = UserCreate(
+            tenant_id=1,
+            username="testuser",
+            email="user@example.com",
+            password="password123",
+            role="MEMBER",
+        )
         json_str = user.model_dump_json()
 
         assert "user@example.com" in json_str
+        assert "testuser" in json_str
         assert "password123" in json_str
 
 
@@ -128,7 +240,10 @@ class TestUserResponse:
         """Test creating UserResponse with valid data."""
         data = {
             "id": 1,
+            "tenant_id": 1,
+            "username": "testuser",
             "email": "user@example.com",
+            "role": "MEMBER",
             "is_totp_enabled": False,
             "is_active": True,
             "created_at": datetime.now(timezone.utc),
@@ -137,17 +252,23 @@ class TestUserResponse:
         user = UserResponse(**data)
 
         assert user.id == 1
+        assert user.tenant_id == 1
+        assert user.username == "testuser"
         assert user.email == "user@example.com"
+        assert user.role == "MEMBER"
         assert user.is_totp_enabled is False
         assert user.is_active is True
 
-    def test_user_response_from_orm_model(self):
+    def test_user_response_from_orm_model(self, test_tenant):
         """Test creating UserResponse from ORM User model."""
         # Create an ORM User instance (not saved to DB)
         orm_user = User(
             id=1,
+            tenant_id=test_tenant.id,
+            username="ormuser",
             email="user@example.com",
             password_hash="hashed_password",
+            role="MEMBER",
             is_totp_enabled=True,
             is_active=True,
             created_at=datetime.now(timezone.utc),
@@ -169,7 +290,10 @@ class TestUserResponse:
         # Missing id
         with pytest.raises(ValidationError):
             UserResponse(
+                tenant_id=1,
+                username="testuser",
                 email="user@example.com",
+                role="MEMBER",
                 is_totp_enabled=False,
                 is_active=True,
                 created_at=datetime.now(timezone.utc),
@@ -180,6 +304,9 @@ class TestUserResponse:
         with pytest.raises(ValidationError):
             UserResponse(
                 id=1,
+                tenant_id=1,
+                username="testuser",
+                role="MEMBER",
                 is_totp_enabled=False,
                 is_active=True,
                 created_at=datetime.now(timezone.utc),
@@ -190,7 +317,10 @@ class TestUserResponse:
         """Test boolean field validation."""
         data = {
             "id": 1,
+            "tenant_id": 1,
+            "username": "testuser",
             "email": "user@example.com",
+            "role": "MEMBER",
             "is_totp_enabled": True,
             "is_active": False,
             "created_at": datetime.now(timezone.utc),
@@ -206,7 +336,10 @@ class TestUserResponse:
         now = datetime.now(timezone.utc)
         data = {
             "id": 1,
+            "tenant_id": 1,
+            "username": "testuser",
             "email": "user@example.com",
+            "role": "MEMBER",
             "is_totp_enabled": False,
             "is_active": True,
             "created_at": now,
@@ -224,7 +357,10 @@ class TestUserResponse:
         now = datetime.now(timezone.utc)
         user = UserResponse(
             id=1,
+            tenant_id=1,
+            username="testuser",
             email="user@example.com",
+            role="MEMBER",
             is_totp_enabled=False,
             is_active=True,
             created_at=now,
@@ -233,7 +369,10 @@ class TestUserResponse:
         data = user.model_dump()
 
         assert data["id"] == 1
+        assert data["tenant_id"] == 1
+        assert data["username"] == "testuser"
         assert data["email"] == "user@example.com"
+        assert data["role"] == "MEMBER"
         assert data["is_totp_enabled"] is False
         assert data["is_active"] is True
         assert isinstance(data["created_at"], datetime)
@@ -242,7 +381,10 @@ class TestUserResponse:
         """Test serializing UserResponse to JSON."""
         user = UserResponse(
             id=1,
+            tenant_id=1,
+            username="testuser",
             email="user@example.com",
+            role="MEMBER",
             is_totp_enabled=False,
             is_active=True,
             created_at=datetime.now(timezone.utc),
@@ -251,6 +393,7 @@ class TestUserResponse:
         json_str = user.model_dump_json()
 
         assert "user@example.com" in json_str
+        assert "testuser" in json_str
         assert '"id":1' in json_str or '"id": 1' in json_str
 
 
@@ -355,22 +498,31 @@ class TestUserUpdate:
 class TestUserSchemasIntegration:
     """Integration tests for user schemas."""
 
-    def test_create_user_workflow(self):
+    def test_create_user_workflow(self, test_tenant):
         """Test complete user creation workflow with schemas."""
         # 1. Client sends UserCreate
         create_data = UserCreate(
+            tenant_id=test_tenant.id,
+            username="workflowuser",
             email="user@example.com",
             password="secure_password_123",
+            role="MEMBER",
         )
 
+        assert create_data.tenant_id == test_tenant.id
+        assert create_data.username == "workflowuser"
         assert create_data.email == "user@example.com"
         assert create_data.password == "secure_password_123"
+        assert create_data.role == "MEMBER"
 
         # 2. Server creates ORM model (simulate)
         orm_user = User(
             id=1,
+            tenant_id=test_tenant.id,
+            username="workflowuser",
             email=create_data.email,
             password_hash="hashed_" + create_data.password,  # Would be bcrypt hash
+            role="MEMBER",
             is_totp_enabled=False,
             is_active=True,
             created_at=datetime.now(timezone.utc),
@@ -406,13 +558,22 @@ class TestUserSchemasIntegration:
         import json
 
         # UserCreate
-        create = UserCreate(email="user@example.com", password="password123")
+        create = UserCreate(
+            tenant_id=1,
+            username="testuser",
+            email="user@example.com",
+            password="password123",
+            role="MEMBER",
+        )
         json.loads(create.model_dump_json())
 
         # UserResponse
         response = UserResponse(
             id=1,
+            tenant_id=1,
+            username="testuser",
             email="user@example.com",
+            role="MEMBER",
             is_totp_enabled=False,
             is_active=True,
             created_at=datetime.now(timezone.utc),

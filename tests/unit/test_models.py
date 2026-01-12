@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import Base, SessionLocal, engine
 from app.models.token import RefreshToken
 from app.models.user import User
+from app.repositories import tenant_repository
 
 
 @pytest.fixture
@@ -34,6 +35,16 @@ def db_session(test_db):
         session.close()
 
 
+@pytest.fixture
+def test_tenant(db_session: Session):
+    """Create a test tenant for model tests."""
+    return tenant_repository.create(
+        db=db_session,
+        email="models_tenant@example.com",
+        password_hash="tenant_hash_123",
+    )
+
+
 class TestUserModel:
     """Test User model structure and behavior."""
 
@@ -50,8 +61,12 @@ class TestUserModel:
 
         expected_columns = {
             "id",
+            "tenant_id",
+            "tenant_name",
+            "username",
             "email",
             "password_hash",
+            "role",
             "totp_secret",
             "is_totp_enabled",
             "created_at",
@@ -80,9 +95,11 @@ class TestUserModel:
 
         assert email_unique, "Email should have unique constraint"
 
-    def test_create_user(self, db_session: Session):
+    def test_create_user(self, db_session: Session, test_tenant):
         """Test creating a new user."""
         user = User(
+            tenant_id=test_tenant.id,
+            username="testuser",
             email="test@example.com",
             password_hash="hashed_password_123",
         )
@@ -91,17 +108,22 @@ class TestUserModel:
         db_session.refresh(user)
 
         assert user.id is not None
+        assert user.tenant_id == test_tenant.id
+        assert user.username == "testuser"
         assert user.email == "test@example.com"
         assert user.password_hash == "hashed_password_123"
+        assert user.role == "MEMBER"
         assert user.totp_secret is None
         assert user.is_totp_enabled is False
         assert user.is_active is True
         assert isinstance(user.created_at, datetime)
         assert isinstance(user.updated_at, datetime)
 
-    def test_user_default_values(self, db_session: Session):
+    def test_user_default_values(self, db_session: Session, test_tenant):
         """Test that User model has correct default values."""
         user = User(
+            tenant_id=test_tenant.id,
+            username="defaultsuser",
             email="defaults@example.com",
             password_hash="hash123",
         )
@@ -110,15 +132,18 @@ class TestUserModel:
         db_session.refresh(user)
 
         # Check defaults
+        assert user.role == "MEMBER"
         assert user.is_totp_enabled is False
         assert user.is_active is True
         assert user.totp_secret is None
         assert user.created_at is not None
         assert user.updated_at is not None
 
-    def test_user_with_totp(self, db_session: Session):
+    def test_user_with_totp(self, db_session: Session, test_tenant):
         """Test creating a user with TOTP enabled."""
         user = User(
+            tenant_id=test_tenant.id,
+            username="totpuser",
             email="totp@example.com",
             password_hash="hash123",
             totp_secret="JBSWY3DPEHPK3PXP",
@@ -131,9 +156,11 @@ class TestUserModel:
         assert user.totp_secret == "JBSWY3DPEHPK3PXP"
         assert user.is_totp_enabled is True
 
-    def test_user_updated_at_changes(self, db_session: Session):
+    def test_user_updated_at_changes(self, db_session: Session, test_tenant):
         """Test that updated_at changes when user is modified."""
         user = User(
+            tenant_id=test_tenant.id,
+            username="updateuser",
             email="update@example.com",
             password_hash="hash123",
         )
@@ -151,9 +178,11 @@ class TestUserModel:
         # updated_at should be different (or at least same/newer)
         assert user.updated_at >= original_updated_at
 
-    def test_user_repr(self, db_session: Session):
+    def test_user_repr(self, db_session: Session, test_tenant):
         """Test User __repr__ method."""
         user = User(
+            tenant_id=test_tenant.id,
+            username="repruser",
             email="repr@example.com",
             password_hash="hash123",
         )
@@ -166,9 +195,11 @@ class TestUserModel:
         assert f"id={user.id}" in repr_str
         assert "repr@example.com" in repr_str
 
-    def test_user_relationship_with_tokens(self, db_session: Session):
+    def test_user_relationship_with_tokens(self, db_session: Session, test_tenant):
         """Test User has relationship with RefreshTokens."""
         user = User(
+            tenant_id=test_tenant.id,
+            username="tokensuser",
             email="tokens@example.com",
             password_hash="hash123",
         )
@@ -243,10 +274,12 @@ class TestRefreshTokenModel:
 
         assert token_unique, "Token should have unique constraint"
 
-    def test_create_refresh_token(self, db_session: Session):
+    def test_create_refresh_token(self, db_session: Session, test_tenant):
         """Test creating a new refresh token."""
         # Create user first
         user = User(
+            tenant_id=test_tenant.id,
+            username="tokenuser",
             email="token_user@example.com",
             password_hash="hash123",
         )
@@ -275,10 +308,15 @@ class TestRefreshTokenModel:
         # SQLite doesn't preserve timezone info, so compare without it
         assert isinstance(token.expires_at, datetime)
 
-    def test_refresh_token_default_values(self, db_session: Session):
+    def test_refresh_token_default_values(self, db_session: Session, test_tenant):
         """Test that RefreshToken model has correct default values."""
         # Create user
-        user = User(email="defaults_token@example.com", password_hash="hash123")
+        user = User(
+            tenant_id=test_tenant.id,
+            username="defaultstokenuser",
+            email="defaults_token@example.com",
+            password_hash="hash123",
+        )
         db_session.add(user)
         db_session.commit()
 
@@ -298,10 +336,15 @@ class TestRefreshTokenModel:
         assert token.scope is None
         assert token.created_at is not None
 
-    def test_refresh_token_with_oauth_fields(self, db_session: Session):
+    def test_refresh_token_with_oauth_fields(self, db_session: Session, test_tenant):
         """Test creating a refresh token with OAuth2 fields."""
         # Create user
-        user = User(email="oauth_user@example.com", password_hash="hash123")
+        user = User(
+            tenant_id=test_tenant.id,
+            username="oauthuser",
+            email="oauth_user@example.com",
+            password_hash="hash123",
+        )
         db_session.add(user)
         db_session.commit()
 
@@ -320,10 +363,15 @@ class TestRefreshTokenModel:
         assert token.client_id == "my_client_app"
         assert token.scope == "read:profile write:posts"
 
-    def test_refresh_token_revocation(self, db_session: Session):
+    def test_refresh_token_revocation(self, db_session: Session, test_tenant):
         """Test revoking a refresh token."""
         # Create user and token
-        user = User(email="revoke_user@example.com", password_hash="hash123")
+        user = User(
+            tenant_id=test_tenant.id,
+            username="revokeuser",
+            email="revoke_user@example.com",
+            password_hash="hash123",
+        )
         db_session.add(user)
         db_session.commit()
 
@@ -345,9 +393,14 @@ class TestRefreshTokenModel:
 
         assert token.is_revoked is True
 
-    def test_refresh_token_repr(self, db_session: Session):
+    def test_refresh_token_repr(self, db_session: Session, test_tenant):
         """Test RefreshToken __repr__ method."""
-        user = User(email="repr_token@example.com", password_hash="hash123")
+        user = User(
+            tenant_id=test_tenant.id,
+            username="reprtokenuser",
+            email="repr_token@example.com",
+            password_hash="hash123",
+        )
         db_session.add(user)
         db_session.commit()
 
@@ -376,10 +429,15 @@ class TestRefreshTokenModel:
         assert "user_id" in fk["constrained_columns"]
         assert fk["referred_table"] == "users"
 
-    def test_delete_user_cascades_tokens(self, db_session: Session):
+    def test_delete_user_cascades_tokens(self, db_session: Session, test_tenant):
         """Test that deleting a user cascades to delete their tokens."""
         # Create user
-        user = User(email="cascade@example.com", password_hash="hash123")
+        user = User(
+            tenant_id=test_tenant.id,
+            username="cascadeuser",
+            email="cascade@example.com",
+            password_hash="hash123",
+        )
         db_session.add(user)
         db_session.commit()
         db_session.refresh(user)
@@ -416,9 +474,14 @@ class TestRefreshTokenModel:
 class TestModelRelationships:
     """Test relationships between models."""
 
-    def test_user_to_tokens_relationship(self, db_session: Session):
+    def test_user_to_tokens_relationship(self, db_session: Session, test_tenant):
         """Test accessing tokens from user."""
-        user = User(email="rel_user@example.com", password_hash="hash123")
+        user = User(
+            tenant_id=test_tenant.id,
+            username="reluser",
+            email="rel_user@example.com",
+            password_hash="hash123",
+        )
         db_session.add(user)
         db_session.commit()
 
@@ -439,9 +502,14 @@ class TestModelRelationships:
         assert len(user.refresh_tokens) == 1
         assert user.refresh_tokens[0].token == "rel_token"
 
-    def test_token_to_user_relationship(self, db_session: Session):
+    def test_token_to_user_relationship(self, db_session: Session, test_tenant):
         """Test accessing user from token."""
-        user = User(email="rel_token_user@example.com", password_hash="hash123")
+        user = User(
+            tenant_id=test_tenant.id,
+            username="reltokenuser",
+            email="rel_token_user@example.com",
+            password_hash="hash123",
+        )
         db_session.add(user)
         db_session.commit()
 

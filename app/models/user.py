@@ -24,6 +24,7 @@ class User(Base):
     Attributes:
         id: Primary key (global auto-increment)
         tenant_id: Foreign key to tenant
+        tenant_name: Tenant's organization name (denormalized for performance, nullable)
         username: User's username (unique per tenant, indexed)
         email: User's email address (globally unique, indexed)
         password_hash: Bcrypt hashed password
@@ -48,6 +49,10 @@ class User(Base):
         ForeignKey("tenants.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+    tenant_name: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
     )
 
     # User Identifiers
@@ -126,4 +131,4 @@ class User(Base):
 
     def __repr__(self) -> str:
         """String representation of User."""
-        return f"<User(id={self.id}, tenant_id={self.tenant_id}, username='{self.username}', email='{self.email}', role='{self.role}', is_active={self.is_active})>"
+        return f"<User(id={self.id}, tenant_id={self.tenant_id}, tenant_name='{self.tenant_name}', username='{self.username}', email='{self.email}', role='{self.role}', is_active={self.is_active})>"

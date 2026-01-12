@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.database import Base, SessionLocal, engine
-from app.repositories import user_repository
+from app.repositories import tenant_repository, user_repository
 
 
 @pytest.fixture
@@ -26,27 +26,45 @@ def db_session(test_db):
         session.close()
 
 
+@pytest.fixture
+def test_tenant(db_session: Session):
+    """Create a test tenant for user tests."""
+    tenant = tenant_repository.create(
+        db=db_session,
+        email="test_tenant@example.com",
+        password_hash="tenant_hash_123",
+    )
+    return tenant
+
+
 class TestCreateUser:
     """Test create() function."""
 
-    def test_create_user_success(self, db_session: Session):
+    def test_create_user_success(self, db_session: Session, test_tenant):
         """Test creating a new user successfully."""
         user = user_repository.create(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="testuser",
             email="test@example.com",
             password_hash="hashed_password_123",
         )
 
         assert user.id is not None
+        assert user.tenant_id == test_tenant.id
+        assert user.username == "testuser"
         assert user.email == "test@example.com"
         assert user.password_hash == "hashed_password_123"
+        assert user.role == "MEMBER"
         assert user.is_totp_enabled is False
         assert user.is_active is True
 
-    def test_create_user_returns_persisted_instance(self, db_session: Session):
+    def test_create_user_returns_persisted_instance(self, db_session: Session, test_tenant):
         """Test that created user is persisted to database."""
         user = user_repository.create(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="persistuser",
             email="persist@example.com",
             password_hash="hash123",
         )
@@ -55,31 +73,39 @@ class TestCreateUser:
         retrieved_user = user_repository.get_by_id(db_session, user.id)
         assert retrieved_user is not None
         assert retrieved_user.email == "persist@example.com"
+        assert retrieved_user.username == "persistuser"
 
-    def test_create_multiple_users(self, db_session: Session):
+    def test_create_multiple_users(self, db_session: Session, test_tenant):
         """Test creating multiple users."""
         user1 = user_repository.create(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="user1",
             email="user1@example.com",
             password_hash="hash1",
         )
         user2 = user_repository.create(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="user2",
             email="user2@example.com",
             password_hash="hash2",
         )
 
         assert user1.id != user2.id
         assert user1.email != user2.email
+        assert user1.username != user2.username
 
 
 class TestGetByIdUser:
     """Test get_by_id() function."""
 
-    def test_get_by_id_existing_user(self, db_session: Session):
+    def test_get_by_id_existing_user(self, db_session: Session, test_tenant):
         """Test getting an existing user by ID."""
         created_user = user_repository.create(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="existsuser",
             email="exists@example.com",
             password_hash="hash123",
         )
@@ -112,10 +138,12 @@ class TestGetByIdUser:
 class TestGetByEmailUser:
     """Test get_by_email() function."""
 
-    def test_get_by_email_existing_user(self, db_session: Session):
+    def test_get_by_email_existing_user(self, db_session: Session, test_tenant):
         """Test getting an existing user by email."""
         created_user = user_repository.create(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="finduser",
             email="find@example.com",
             password_hash="hash123",
         )
@@ -132,10 +160,12 @@ class TestGetByEmailUser:
 
         assert user is None
 
-    def test_get_by_email_case_sensitive(self, db_session: Session):
+    def test_get_by_email_case_sensitive(self, db_session: Session, test_tenant):
         """Test that email lookup is case-sensitive."""
         user_repository.create(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="caseuser",
             email="test@example.com",
             password_hash="hash123",
         )
@@ -159,10 +189,12 @@ class TestGetByEmailUser:
 class TestUpdateTotpSecret:
     """Test update_totp_secret() function."""
 
-    def test_update_totp_secret_success(self, db_session: Session):
+    def test_update_totp_secret_success(self, db_session: Session, test_tenant):
         """Test updating TOTP secret successfully."""
         user = user_repository.create(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="totpuser",
             email="totp@example.com",
             password_hash="hash123",
         )
@@ -176,10 +208,12 @@ class TestUpdateTotpSecret:
         assert updated_user.totp_secret == "JBSWY3DPEHPK3PXP"
         assert updated_user.id == user.id
 
-    def test_update_totp_secret_persists(self, db_session: Session):
+    def test_update_totp_secret_persists(self, db_session: Session, test_tenant):
         """Test that TOTP secret update persists to database."""
         user = user_repository.create(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="persisttotp",
             email="persist_totp@example.com",
             password_hash="hash123",
         )
@@ -203,10 +237,12 @@ class TestUpdateTotpSecret:
                 secret="SECRET123",
             )
 
-    def test_update_totp_secret_multiple_times(self, db_session: Session):
+    def test_update_totp_secret_multiple_times(self, db_session: Session, test_tenant):
         """Test updating TOTP secret multiple times."""
         user = user_repository.create(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="multitotp",
             email="multi_totp@example.com",
             password_hash="hash123",
         )
@@ -231,10 +267,12 @@ class TestUpdateTotpSecret:
 class TestEnableTotp:
     """Test enable_totp() function."""
 
-    def test_enable_totp_success(self, db_session: Session):
+    def test_enable_totp_success(self, db_session: Session, test_tenant):
         """Test enabling TOTP successfully."""
         user = user_repository.create(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="enableuser",
             email="enable@example.com",
             password_hash="hash123",
         )
@@ -249,10 +287,12 @@ class TestEnableTotp:
         assert updated_user.is_totp_enabled is True
         assert updated_user.id == user.id
 
-    def test_enable_totp_persists(self, db_session: Session):
+    def test_enable_totp_persists(self, db_session: Session, test_tenant):
         """Test that enabling TOTP persists to database."""
         user = user_repository.create(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="persistenable",
             email="persist_enable@example.com",
             password_hash="hash123",
         )
@@ -271,10 +311,12 @@ class TestEnableTotp:
                 user_id=99999,
             )
 
-    def test_enable_totp_idempotent(self, db_session: Session):
+    def test_enable_totp_idempotent(self, db_session: Session, test_tenant):
         """Test enabling TOTP multiple times is idempotent."""
         user = user_repository.create(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="idempotentuser",
             email="idempotent@example.com",
             password_hash="hash123",
         )
@@ -291,11 +333,13 @@ class TestEnableTotp:
 class TestUserRepositoryIntegration:
     """Integration tests for user repository functions."""
 
-    def test_complete_user_workflow(self, db_session: Session):
+    def test_complete_user_workflow(self, db_session: Session, test_tenant):
         """Test complete workflow: create, retrieve, update TOTP, enable TOTP."""
         # Create user
         user = user_repository.create(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="workflowuser",
             email="workflow@example.com",
             password_hash="hash123",
         )
@@ -330,16 +374,20 @@ class TestUserRepositoryIntegration:
         assert final_user.totp_secret == "SECRETKEY"
         assert final_user.is_totp_enabled is True
 
-    def test_multiple_users_do_not_interfere(self, db_session: Session):
+    def test_multiple_users_do_not_interfere(self, db_session: Session, test_tenant):
         """Test that operations on one user don't affect others."""
         # Create two users
         user1 = user_repository.create(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="user1",
             email="user1@example.com",
             password_hash="hash1",
         )
         user2 = user_repository.create(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="user2",
             email="user2@example.com",
             password_hash="hash2",
         )

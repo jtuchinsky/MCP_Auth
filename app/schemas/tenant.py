@@ -13,6 +13,7 @@ class TenantLoginRequest(BaseModel):
     """
 
     tenant_email: EmailStr = Field(..., description="Tenant's email address (globally unique)")
+    tenant_name: str | None = Field(None, max_length=255, description="Tenant's organization name (optional)")
     password: str = Field(..., description="Tenant's password")
     totp_code: str | None = Field(
         None,
@@ -26,6 +27,7 @@ class TenantLoginRequest(BaseModel):
         json_schema_extra={
             "example": {
                 "tenant_email": "company@example.com",
+                "tenant_name": "Acme Corporation",
                 "password": "secure_password_123",
                 "totp_code": "123456",
             }
@@ -67,6 +69,7 @@ class TenantResponse(BaseModel):
 
     id: int = Field(..., description="Tenant's unique ID")
     email: str = Field(..., description="Tenant's email address")
+    tenant_name: str | None = Field(None, description="Tenant's organization name")
     is_active: bool = Field(..., description="Whether tenant account is active")
     created_at: datetime = Field(..., description="Tenant creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
@@ -77,6 +80,7 @@ class TenantResponse(BaseModel):
             "example": {
                 "id": 2,
                 "email": "company@example.com",
+                "tenant_name": "Acme Corporation",
                 "is_active": True,
                 "created_at": "2024-01-15T10:30:00Z",
                 "updated_at": "2024-01-15T10:30:00Z",
@@ -93,6 +97,7 @@ class TenantCreate(BaseModel):
     """
 
     email: EmailStr = Field(..., description="Tenant's email address (globally unique)")
+    tenant_name: str | None = Field(None, max_length=255, description="Tenant's organization name (optional)")
     password: str = Field(
         ..., min_length=8, max_length=100, description="Tenant's password (min 8 chars)"
     )
@@ -101,6 +106,7 @@ class TenantCreate(BaseModel):
         json_schema_extra={
             "example": {
                 "email": "newcompany@example.com",
+                "tenant_name": "New Company Inc",
                 "password": "secure_password_123",
             }
         }

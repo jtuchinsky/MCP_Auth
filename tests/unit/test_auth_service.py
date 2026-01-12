@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import AuthenticationError
 from app.database import Base, SessionLocal, engine
-from app.repositories import token_repository, user_repository
+from app.repositories import tenant_repository, token_repository, user_repository
 from app.services import auth_service
 
 
@@ -30,27 +30,44 @@ def db_session(test_db):
         session.close()
 
 
+@pytest.fixture
+def test_tenant(db_session: Session):
+    """Create a test tenant for auth service tests."""
+    return tenant_repository.create(
+        db=db_session,
+        email="auth_tenant@example.com",
+        password_hash="tenant_hash_123",
+    )
+
+
 class TestRegisterUser:
     """Test register_user() function."""
 
-    def test_register_user_success(self, db_session: Session):
+    def test_register_user_success(self, db_session: Session, test_tenant):
         """Test registering a new user successfully."""
         user = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="newuser",
             email="newuser@example.com",
             password="secure_password_123",
         )
 
         assert user.id is not None
+        assert user.tenant_id == test_tenant.id
+        assert user.username == "newuser"
         assert user.email == "newuser@example.com"
         assert user.password_hash != "secure_password_123"  # Should be hashed
+        assert user.role == "MEMBER"
         assert user.is_totp_enabled is False
         assert user.is_active is True
 
-    def test_register_user_hashes_password(self, db_session: Session):
+    def test_register_user_hashes_password(self, db_session: Session, test_tenant):
         """Test that password is hashed during registration."""
         user = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="testuser",
             email="test@example.com",
             password="plain_password",
         )
@@ -59,11 +76,13 @@ class TestRegisterUser:
         assert user.password_hash.startswith("$2b$")
         assert user.password_hash != "plain_password"
 
-    def test_register_user_duplicate_email(self, db_session: Session):
+    def test_register_user_duplicate_email(self, db_session: Session, test_tenant):
         """Test that registering duplicate email raises error."""
         # Register first user
         auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="duplicate1",
             email="duplicate@example.com",
             password="password1",
         )
@@ -72,14 +91,18 @@ class TestRegisterUser:
         with pytest.raises(ValueError, match="already exists"):
             auth_service.register_user(
                 db=db_session,
+                tenant_id=test_tenant.id,
+                username="duplicate2",
                 email="duplicate@example.com",
                 password="password2",
             )
 
-    def test_register_user_persists_to_database(self, db_session: Session):
+    def test_register_user_persists_to_database(self, db_session: Session, test_tenant):
         """Test that registered user is persisted to database."""
         user = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="persistuser",
             email="persist@example.com",
             password="password",
         )
@@ -87,17 +110,20 @@ class TestRegisterUser:
         # Retrieve user from database
         retrieved_user = user_repository.get_by_id(db_session, user.id)
         assert retrieved_user is not None
+        assert retrieved_user.username == "persistuser"
         assert retrieved_user.email == "persist@example.com"
 
 
 class TestAuthenticateUser:
     """Test authenticate_user() function."""
 
-    def test_authenticate_user_success(self, db_session: Session):
+    def test_authenticate_user_success(self, db_session: Session, test_tenant):
         """Test authenticating user with correct credentials."""
         # Register user
         registered_user = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="authuser",
             email="auth@example.com",
             password="correct_password",
         )
@@ -112,7 +138,7 @@ class TestAuthenticateUser:
         assert user.id == registered_user.id
         assert user.email == "auth@example.com"
 
-    def test_authenticate_user_wrong_email(self, db_session: Session):
+    def test_authenticate_user_wrong_email(self, db_session: Session, test_tenant):
         """Test authentication fails with wrong email."""
         with pytest.raises(AuthenticationError, match="Invalid email or password"):
             auth_service.authenticate_user(
@@ -121,11 +147,13 @@ class TestAuthenticateUser:
                 password="any_password",
             )
 
-    def test_authenticate_user_wrong_password(self, db_session: Session):
+    def test_authenticate_user_wrong_password(self, db_session: Session, test_tenant):
         """Test authentication fails with wrong password."""
         # Register user
         auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="wrongpassuser",
             email="user@example.com",
             password="correct_password",
         )
@@ -138,11 +166,13 @@ class TestAuthenticateUser:
                 password="wrong_password",
             )
 
-    def test_authenticate_user_inactive_account(self, db_session: Session):
+    def test_authenticate_user_inactive_account(self, db_session: Session, test_tenant):
         """Test authentication fails for inactive user."""
         # Register user
         user = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="inactive1",
             email="inactive@example.com",
             password="password",
         )
@@ -159,11 +189,13 @@ class TestAuthenticateUser:
                 password="password",
             )
 
-    def test_authenticate_user_case_sensitive_email(self, db_session: Session):
+    def test_authenticate_user_case_sensitive_email(self, db_session: Session, test_tenant):
         """Test that email authentication is case-sensitive."""
         # Register user
         auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="test2",
             email="test@example.com",
             password="password",
         )
@@ -181,11 +213,13 @@ class TestAuthenticateUser:
 class TestCreateTokens:
     """Test create_tokens() function."""
 
-    def test_create_tokens_basic(self, db_session: Session):
+    def test_create_tokens_basic(self, db_session: Session, test_tenant):
         """Test creating tokens for a user."""
         # Register user
         user = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="tokens3",
             email="tokens@example.com",
             password="password",
         )
@@ -202,11 +236,13 @@ class TestCreateTokens:
         assert len(refresh_token) > 0
         assert access_token != refresh_token
 
-    def test_create_tokens_with_client_and_scope(self, db_session: Session):
+    def test_create_tokens_with_client_and_scope(self, db_session: Session, test_tenant):
         """Test creating tokens with client_id and scope."""
         # Register user
         user = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="oauth4",
             email="oauth@example.com",
             password="password",
         )
@@ -224,11 +260,13 @@ class TestCreateTokens:
         assert stored_token.client_id == "test_client"
         assert stored_token.scope == "read write"
 
-    def test_create_tokens_stores_refresh_token(self, db_session: Session):
+    def test_create_tokens_stores_refresh_token(self, db_session: Session, test_tenant):
         """Test that refresh token is stored in database."""
         # Register user
         user = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="store5",
             email="store@example.com",
             password="password",
         )
@@ -245,11 +283,13 @@ class TestCreateTokens:
         assert stored_token.user_id == user.id
         assert stored_token.is_revoked is False
 
-    def test_create_tokens_access_token_format(self, db_session: Session):
+    def test_create_tokens_access_token_format(self, db_session: Session, test_tenant):
         """Test that access token is JWT format."""
         # Register user
         user = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="jwt6",
             email="jwt@example.com",
             password="password",
         )
@@ -263,11 +303,13 @@ class TestCreateTokens:
         # JWT has 3 parts separated by dots
         assert access_token.count(".") == 2
 
-    def test_create_tokens_multiple_times(self, db_session: Session):
+    def test_create_tokens_multiple_times(self, db_session: Session, test_tenant):
         """Test creating multiple tokens for same user."""
         # Register user
         user = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="multiple7",
             email="multiple@example.com",
             password="password",
         )
@@ -290,11 +332,13 @@ class TestCreateTokens:
 class TestRefreshAccessToken:
     """Test refresh_access_token() function."""
 
-    def test_refresh_access_token_success(self, db_session: Session):
+    def test_refresh_access_token_success(self, db_session: Session, test_tenant):
         """Test refreshing an access token successfully."""
         # Register user and create tokens
         user = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="refresh8",
             email="refresh@example.com",
             password="password",
         )
@@ -318,7 +362,7 @@ class TestRefreshAccessToken:
         old_token = token_repository.get_by_token(db_session, old_refresh)
         assert old_token.is_revoked is True
 
-    def test_refresh_access_token_invalid_token(self, db_session: Session):
+    def test_refresh_access_token_invalid_token(self, db_session: Session, test_tenant):
         """Test refreshing with invalid token fails."""
         with pytest.raises(AuthenticationError, match="Invalid refresh token"):
             auth_service.refresh_access_token(
@@ -326,11 +370,13 @@ class TestRefreshAccessToken:
                 refresh_token="nonexistent_token",
             )
 
-    def test_refresh_access_token_revoked_token(self, db_session: Session):
+    def test_refresh_access_token_revoked_token(self, db_session: Session, test_tenant):
         """Test refreshing with revoked token fails."""
         # Register user and create tokens
         user = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="revoked9",
             email="revoked@example.com",
             password="password",
         )
@@ -346,11 +392,13 @@ class TestRefreshAccessToken:
                 refresh_token=refresh_token,
             )
 
-    def test_refresh_access_token_expired_token(self, db_session: Session):
+    def test_refresh_access_token_expired_token(self, db_session: Session, test_tenant):
         """Test refreshing with expired token fails."""
         # Register user
         user = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="expired10",
             email="expired@example.com",
             password="password",
         )
@@ -375,11 +423,13 @@ class TestRefreshAccessToken:
                 refresh_token=expired_token,
             )
 
-    def test_refresh_access_token_inactive_user(self, db_session: Session):
+    def test_refresh_access_token_inactive_user(self, db_session: Session, test_tenant):
         """Test refreshing token for inactive user fails."""
         # Register user and create tokens
         user = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="inactive_refresh11",
             email="inactive_refresh@example.com",
             password="password",
         )
@@ -397,12 +447,14 @@ class TestRefreshAccessToken:
             )
 
     def test_refresh_access_token_preserves_client_and_scope(
-        self, db_session: Session
+        self, db_session: Session, test_tenant
     ):
         """Test that refresh preserves client_id and scope."""
         # Register user and create tokens with OAuth2 params
         user = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="oauth_refresh12",
             email="oauth_refresh@example.com",
             password="password",
         )
@@ -428,7 +480,7 @@ class TestRefreshAccessToken:
 class TestAuthServiceIntegration:
     """Integration tests for auth service functions."""
 
-    def test_complete_registration_and_login_workflow(self, db_session: Session):
+    def test_complete_registration_and_login_workflow(self, db_session: Session, test_tenant):
         """Test complete user registration and login workflow."""
         email = "complete@example.com"
         password = "secure_password"
@@ -436,6 +488,8 @@ class TestAuthServiceIntegration:
         # Register user
         registered_user = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="completeuser",
             email=email,
             password=password,
         )
@@ -457,11 +511,13 @@ class TestAuthServiceIntegration:
         assert len(access_token) > 0
         assert len(refresh_token) > 0
 
-    def test_token_refresh_workflow(self, db_session: Session):
+    def test_token_refresh_workflow(self, db_session: Session, test_tenant):
         """Test token refresh workflow."""
         # Register and get initial tokens
         user = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="refresh_workflow13",
             email="refresh_workflow@example.com",
             password="password",
         )
@@ -489,16 +545,20 @@ class TestAuthServiceIntegration:
         new_token = token_repository.get_by_token(db_session, refresh2)
         assert new_token.is_revoked is False
 
-    def test_multiple_users_do_not_interfere(self, db_session: Session):
+    def test_multiple_users_do_not_interfere(self, db_session: Session, test_tenant):
         """Test that operations on different users don't interfere."""
         # Register two users
         user1 = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="user114",
             email="user1@example.com",
             password="password1",
         )
         user2 = auth_service.register_user(
             db=db_session,
+            tenant_id=test_tenant.id,
+            username="user215",
             email="user2@example.com",
             password="password2",
         )
