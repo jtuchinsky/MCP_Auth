@@ -1386,6 +1386,236 @@ curl http://127.0.0.1:8000/.well-known/oauth-authorization-server
 
 ---
 
+### 6.5 Tenant Management Endpoints
+
+#### GET /tenants/me
+
+**Description**: Get current user's tenant information
+
+**Authorization**: Any authenticated user (OWNER, ADMIN, MEMBER)
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": 2,
+  "email": "company@example.com",
+  "tenant_name": "Acme Corporation",
+  "is_active": true,
+  "created_at": "2026-01-11T10:30:00Z",
+  "updated_at": "2026-01-11T10:30:00Z"
+}
+```
+
+**Errors:**
+- `401 Unauthorized`: Missing or invalid access token
+- `404 Not Found`: Tenant not found
+
+**Example:**
+```bash
+curl -X GET "http://127.0.0.1:8000/tenants/me" \
+  -H "Authorization: Bearer eyJhbGc..."
+```
+
+---
+
+#### PUT /tenants/me
+
+**Description**: Update current user's tenant information (e.g., tenant name)
+
+**Authorization**: OWNER or ADMIN role required
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Request Body:**
+```json
+{
+  "tenant_name": "New Company Name"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": 2,
+  "email": "company@example.com",
+  "tenant_name": "New Company Name",
+  "is_active": true,
+  "created_at": "2026-01-11T10:30:00Z",
+  "updated_at": "2026-01-12T15:45:00Z"
+}
+```
+
+**Errors:**
+- `401 Unauthorized`: Missing or invalid access token
+- `403 Forbidden`: User is not OWNER or ADMIN
+- `404 Not Found`: Tenant not found
+
+**Example:**
+```bash
+curl -X PUT "http://127.0.0.1:8000/tenants/me" \
+  -H "Authorization: Bearer eyJhbGc..." \
+  -H "Content-Type: application/json" \
+  -d '{"tenant_name": "New Company Name"}'
+```
+
+---
+
+#### PATCH /tenants/me/status
+
+**Description**: Activate or deactivate the tenant
+
+**Authorization**: OWNER role required
+
+**⚠️ Warning**: Deactivating a tenant will prevent all users in the tenant from logging in.
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Request Body:**
+```json
+{
+  "is_active": false
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": 2,
+  "email": "company@example.com",
+  "tenant_name": "Acme Corporation",
+  "is_active": false,
+  "created_at": "2026-01-11T10:30:00Z",
+  "updated_at": "2026-01-12T16:00:00Z"
+}
+```
+
+**Errors:**
+- `401 Unauthorized`: Missing or invalid access token
+- `403 Forbidden`: User is not OWNER
+- `404 Not Found`: Tenant not found
+
+**Example:**
+```bash
+# Deactivate tenant
+curl -X PATCH "http://127.0.0.1:8000/tenants/me/status" \
+  -H "Authorization: Bearer eyJhbGc..." \
+  -H "Content-Type: application/json" \
+  -d '{"is_active": false}'
+
+# Reactivate tenant
+curl -X PATCH "http://127.0.0.1:8000/tenants/me/status" \
+  -H "Authorization: Bearer eyJhbGc..." \
+  -H "Content-Type: application/json" \
+  -d '{"is_active": true}'
+```
+
+---
+
+#### DELETE /tenants/me
+
+**Description**: Soft delete (deactivate) current user's tenant
+
+**Authorization**: OWNER role required
+
+**⚠️ Important**: This is a soft delete - the tenant is marked as inactive but not removed from the database. All users in this tenant will be unable to log in.
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response (204 No Content):**
+No response body
+
+**Errors:**
+- `401 Unauthorized`: Missing or invalid access token
+- `403 Forbidden`: User is not OWNER
+- `404 Not Found`: Tenant not found
+
+**Example:**
+```bash
+curl -X DELETE "http://127.0.0.1:8000/tenants/me" \
+  -H "Authorization: Bearer eyJhbGc..."
+```
+
+---
+
+#### GET /tenants/me/users
+
+**Description**: List all users in the current user's tenant
+
+**Authorization**: OWNER or ADMIN role required
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response (200 OK):**
+```json
+[
+  {
+    "id": 1,
+    "tenant_id": 2,
+    "tenant_name": "Acme Corporation",
+    "username": "company@example.com",
+    "email": "company@example.com",
+    "role": "OWNER",
+    "is_totp_enabled": false,
+    "is_active": true,
+    "created_at": "2026-01-11T10:30:00Z",
+    "updated_at": "2026-01-11T10:30:00Z"
+  },
+  {
+    "id": 2,
+    "tenant_id": 2,
+    "tenant_name": "Acme Corporation",
+    "username": "alice",
+    "email": "alice@acme.com",
+    "role": "MEMBER",
+    "is_totp_enabled": true,
+    "is_active": true,
+    "created_at": "2026-01-11T11:00:00Z",
+    "updated_at": "2026-01-11T11:00:00Z"
+  }
+]
+```
+
+**Errors:**
+- `401 Unauthorized`: Missing or invalid access token
+- `403 Forbidden`: User is not OWNER or ADMIN
+
+**Example:**
+```bash
+curl -X GET "http://127.0.0.1:8000/tenants/me/users" \
+  -H "Authorization: Bearer eyJhbGc..."
+```
+
+---
+
+**Role-Based Authorization Matrix:**
+
+| Endpoint | OWNER | ADMIN | MEMBER |
+|----------|-------|-------|--------|
+| GET /tenants/me | ✅ | ✅ | ✅ |
+| PUT /tenants/me | ✅ | ✅ | ❌ |
+| PATCH /tenants/me/status | ✅ | ❌ | ❌ |
+| DELETE /tenants/me | ✅ | ❌ | ❌ |
+| GET /tenants/me/users | ✅ | ✅ | ❌ |
+
+---
+
 ## 7. Integration Guide
 
 ### 7.1 Integration Checklist

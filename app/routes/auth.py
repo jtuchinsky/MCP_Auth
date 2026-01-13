@@ -58,6 +58,7 @@ async def login(
             db=db,
             tenant_email=login_data.tenant_email,
             password=login_data.password,
+            tenant_name=login_data.tenant_name,
         )
 
         # Check if TOTP is enabled (skip for new tenants)

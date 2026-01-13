@@ -111,3 +111,39 @@ class TenantCreate(BaseModel):
             }
         }
     )
+
+
+class TenantUpdate(BaseModel):
+    """Schema for updating tenant information.
+
+    Only OWNER or ADMIN roles can update tenant information.
+    Used by PUT /tenants/me endpoint.
+    """
+
+    tenant_name: str | None = Field(None, max_length=255, description="New tenant name (optional)")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "tenant_name": "Updated Company Name",
+            }
+        }
+    )
+
+
+class TenantStatusUpdate(BaseModel):
+    """Schema for updating tenant status (activate/deactivate).
+
+    Only OWNER role can update tenant status.
+    Used by PATCH /tenants/me/status endpoint.
+    """
+
+    is_active: bool = Field(..., description="New tenant status (true=active, false=inactive)")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "is_active": False,
+            }
+        }
+    )

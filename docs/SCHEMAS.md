@@ -1203,9 +1203,16 @@ CREATE TABLE api_keys (
 - `app/models/user.py` - User model
 - `app/models/token.py` - RefreshToken model
 
+### Routes (API Layer)
+
+- `app/routes/auth.py` - Authentication endpoints (tenant/user login, TOTP)
+- `app/routes/tenants.py` - Tenant CRUD endpoints (view, update, status, delete, list users)
+- `app/routes/protected.py` - Protected user profile endpoints
+- `app/routes/well_known.py` - OAuth 2.1 metadata discovery
+
 ### Repositories (Data Access Layer)
 
-- `app/repositories/tenant_repository.py` - Tenant CRUD operations
+- `app/repositories/tenant_repository.py` - Tenant CRUD operations (create, get, update, update_status)
 - `app/repositories/user_repository.py` - User CRUD operations
 - `app/repositories/token_repository.py` - Token management
 

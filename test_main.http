@@ -9,3 +9,12 @@ GET http://127.0.0.1:8000/hello/User
 Accept: application/json
 
 ###
+
+POST /auth/login HTTP/1.1
+Host: 127.0.0.1:8000
+Content-Type: application/json
+
+{
+  "tenant_email": "mycompany@example.com",
+  "tenant_name": "My Company",
+  "password": "SecurePassword123!"}

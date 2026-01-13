@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.exceptions import AuthenticationError, AuthorizationError, TOTPError
-from app.routes import auth, protected, well_known
+from app.routes import auth, protected, tenants, well_known
 
 # OpenAPI metadata for MCP compliance
 DESCRIPTION = """
@@ -65,6 +65,10 @@ TAGS_METADATA = [
     {
         "name": "Protected",
         "description": "Protected endpoints requiring valid JWT authentication.",
+    },
+    {
+        "name": "Tenants",
+        "description": "Tenant management operations (CRUD) with role-based authorization.",
     },
     {
         "name": "MCP Metadata",
@@ -136,6 +140,7 @@ async def totp_error_handler(request: Request, exc: TOTPError) -> JSONResponse:
 # Include routers
 app.include_router(auth.router)
 app.include_router(protected.router)
+app.include_router(tenants.router)
 app.include_router(well_known.router)
 
 

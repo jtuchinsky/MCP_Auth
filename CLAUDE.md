@@ -13,6 +13,7 @@ This service provides secure user authentication, JWT-based access control, TOTP
 ## Features
 
 - ✅ **Tenant-Based Authentication** - Multi-tenant architecture with auto-creation on first login
+- ✅ **Tenant CRUD Management** - Full tenant lifecycle management (view, update, status, delete, list users) with role-based authorization
 - ✅ **User Registration & Login** - Secure account creation with bcrypt password hashing for tenants and users
 - ✅ **JWT Access Tokens** - Short-lived tokens (15 minutes) with HS256 signing, includes `tenant_id` and `role` claims
 - ✅ **Refresh Tokens** - Long-lived tokens (30 days) with automatic rotation
@@ -28,10 +29,10 @@ This service provides secure user authentication, JWT-based access control, TOTP
 ### Layered Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    API Layer (Routes)                    │
-│  /auth/*  |  /api/protected/*  |  /.well-known/*       │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                       API Layer (Routes)                              │
+│  /auth/*  |  /api/protected/*  |  /tenants/*  |  /.well-known/*     │
+└──────────────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────┐
 │              Business Logic Layer (Services)             │
@@ -53,6 +54,7 @@ This service provides secure user authentication, JWT-based access control, TOTP
 
 1. **Routes** (`app/routes/`) - FastAPI endpoint handlers
    - `auth.py` - Authentication endpoints (tenant login, user login, TOTP)
+   - `tenants.py` - Tenant CRUD endpoints (view, update, status, delete, list users)
    - `protected.py` - Protected user profile endpoints
    - `well_known.py` - OAuth 2.1 metadata discovery
 
@@ -137,10 +139,11 @@ MCP_Auth/
 │   │   └── token_repository.py   # Token database operations
 │   ├── routes/
 │   │   ├── auth.py           # Authentication endpoints (tenant login, user login)
+│   │   ├── tenants.py        # Tenant CRUD endpoints (view, update, status, delete, list users)
 │   │   ├── protected.py      # Protected user endpoints
 │   │   └── well_known.py     # OAuth 2.1 metadata
 │   ├── schemas/
-│   │   ├── tenant.py         # Tenant request/response schemas
+│   │   ├── tenant.py         # Tenant request/response schemas (TenantUpdate, TenantStatusUpdate)
 │   │   ├── auth.py           # Auth request/response schemas
 │   │   ├── totp.py           # TOTP schemas
 │   │   └── user.py           # User schemas (with tenant_id, username, role)
@@ -317,13 +320,26 @@ For detailed API endpoint documentation including request/response examples, see
 - **ReDoc** - http://127.0.0.1:8000/redoc (alternative documentation)
 
 Key endpoints:
+
+**Authentication:**
 - `POST /auth/login` - **Tenant login** (auto-creates tenant + owner on first use)
 - `POST /auth/login-user` - **User login** within existing tenant
 - `POST /auth/register` - ⚠️ **Deprecated** - Register new user within tenant
 - `POST /auth/totp/validate` - Login with TOTP (for 2FA users)
 - `POST /auth/refresh` - Refresh access token
 - `POST /auth/logout` - Logout and revoke refresh token
+
+**Tenant Management (CRUD):**
+- `GET /tenants/me` - Get current tenant info (any role)
+- `PUT /tenants/me` - Update tenant name (OWNER/ADMIN)
+- `PATCH /tenants/me/status` - Activate/deactivate tenant (OWNER only)
+- `DELETE /tenants/me` - Soft delete tenant (OWNER only)
+- `GET /tenants/me/users` - List all users in tenant (OWNER/ADMIN)
+
+**Protected Resources:**
 - `GET /api/protected/me` - Get current user (includes tenant_id, username, role)
+
+**MCP Compliance:**
 - `GET /.well-known/oauth-authorization-server` - OAuth 2.1 metadata
 
 ## MCP OAuth 2.1 Compliance

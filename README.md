@@ -18,11 +18,13 @@ A production-ready FastAPI authentication service implementing OAuth 2.1 with fu
 - ✅ Tenant & User repositories with tenant-scoped queries
 - ✅ Tenant service with auto-creation logic
 - ✅ Auth & JWT services updated for multi-tenancy
-- ✅ API schemas with tenant support (TenantLoginRequest, etc.)
+- ✅ API schemas with tenant support (TenantLoginRequest, TenantUpdate, TenantStatusUpdate)
 - ✅ API routes with tenant-based authentication
-- ✅ Dependencies with tenant isolation & role-based auth
+- ✅ Tenant CRUD endpoints (5 endpoints: view, update, status, delete, list users)
+- ✅ Dependencies with tenant isolation & role-based auth (OWNER, ADMIN, MEMBER)
 - ✅ 48 passing unit tests (23 tenant + 25 JWT)
 - ✅ End-to-end tenant authentication working
+- ✅ tenant_name field properly saved on creation
 
 **Next**: Update existing tests for tenant support, user invitation system
 
@@ -33,6 +35,7 @@ See [docs/TENANT_REFACTORING.md](docs/TENANT_REFACTORING.md) for complete refact
 - 🏢 **Tenant-Based Authentication** - Multi-tenant architecture with auto-tenant creation
 - 🔐 **Secure Authentication** - Bcrypt password hashing for tenants and users
 - 👥 **Multi-User Ready** - User roles (OWNER, ADMIN, MEMBER), invitation system pending
+- 🏗️ **Tenant Management** - Full CRUD API for tenant operations with role-based access control
 - 🎫 **JWT Tokens** - Short-lived access tokens (15 min) with refresh token rotation
 - 🔑 **TOTP 2FA** - Time-based One-Time Password authentication with QR code setup
 - 🌐 **MCP OAuth 2.1** - Full compliance with Model Context Protocol specifications
@@ -228,6 +231,18 @@ curl -X POST "http://127.0.0.1:8000/auth/totp/validate" \
 | GET | `/api/protected/me` | Get current user profile | Yes |
 | PATCH | `/api/protected/profile` | Update user profile | Yes |
 
+### Tenant Management
+
+| Method | Endpoint | Description | Auth Required | Status |
+|--------|----------|-------------|---------------|--------|
+| GET | `/tenants/me` | Get current tenant info | Any role | ✅ Complete |
+| PUT | `/tenants/me` | Update tenant name | OWNER/ADMIN | ✅ Complete |
+| PATCH | `/tenants/me/status` | Activate/deactivate tenant | OWNER only | ✅ Complete |
+| DELETE | `/tenants/me` | Soft delete tenant | OWNER only | ✅ Complete |
+| GET | `/tenants/me/users` | List all users in tenant | OWNER/ADMIN | ✅ Complete |
+
+**Role-Based Access**: Tenant endpoints enforce role-based authorization (OWNER, ADMIN, MEMBER). See [docs/USER_MANUAL.md](docs/USER_MANUAL.md) for details.
+
 ### MCP Metadata
 
 | Method | Endpoint | Description | Auth Required |
@@ -348,10 +363,14 @@ MCP_Auth/
 │   │   ├── user.py        # UPDATED: Added tenant_id, username, role
 │   │   └── token.py       # RefreshToken model
 │   ├── repositories/  # Database operations
-│   │   ├── tenant_repository.py  # NEW: Tenant CRUD
+│   │   ├── tenant_repository.py  # NEW: Tenant CRUD + update()
 │   │   ├── user_repository.py    # UPDATED: Tenant-scoped queries
 │   │   └── token_repository.py   # Token CRUD
 │   ├── routes/        # API endpoints
+│   │   ├── auth.py          # Authentication endpoints
+│   │   ├── protected.py     # Protected user endpoints
+│   │   ├── tenants.py       # NEW: Tenant CRUD endpoints
+│   │   └── well_known.py    # MCP metadata
 │   ├── schemas/       # Pydantic models
 │   ├── services/      # Business logic
 │   │   ├── tenant_service.py  # NEW: Tenant auth with auto-creation

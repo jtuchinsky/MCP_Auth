@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.tenant import Tenant
 
 
-def create(db: Session, email: str, password_hash: str) -> Tenant:
+def create(db: Session, email: str, password_hash: str, tenant_name: str | None = None) -> Tenant:
     """
     Create a new tenant.
 
@@ -13,17 +13,19 @@ def create(db: Session, email: str, password_hash: str) -> Tenant:
         db: Database session
         email: Tenant's email address (globally unique)
         password_hash: Bcrypt hashed password
+        tenant_name: Tenant's organization name (optional)
 
     Returns:
         Created Tenant instance
 
     Example:
-        >>> tenant = create(db, "company@example.com", hashed_password)
+        >>> tenant = create(db, "company@example.com", hashed_password, "Acme Corp")
         >>> print(tenant.email)
         company@example.com
     """
     tenant = Tenant(
         email=email.lower(),  # Normalize email to lowercase
+        tenant_name=tenant_name,
         password_hash=password_hash,
         is_active=True,
     )
@@ -133,3 +135,33 @@ def count_all(db: Session) -> int:
         >>> print(f"Total tenants: {total}")
     """
     return db.query(Tenant).count()
+
+
+def update(db: Session, tenant_id: int, tenant_name: str | None = None) -> Tenant | None:
+    """
+    Update tenant information.
+
+    Args:
+        db: Database session
+        tenant_id: Tenant's ID
+        tenant_name: New tenant name (optional, if provided will update the name)
+
+    Returns:
+        Updated Tenant instance or None if not found
+
+    Example:
+        >>> tenant = update(db, 1, "New Company Name")
+        >>> if tenant:
+        ...     print(f"Updated tenant: {tenant.tenant_name}")
+    """
+    tenant = get_by_id(db, tenant_id)
+    if not tenant:
+        return None
+
+    # Only update fields that are provided (not None)
+    if tenant_name is not None:
+        tenant.tenant_name = tenant_name
+
+    db.commit()
+    db.refresh(tenant)
+    return tenant

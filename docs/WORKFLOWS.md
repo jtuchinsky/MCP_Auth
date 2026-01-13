@@ -85,12 +85,12 @@ Throughout this document, we use the following symbols:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                    TENANT REGISTRATION WORKFLOW                   │
+│                    TENANT REGISTRATION WORKFLOW                  │
 └──────────────────────────────────────────────────────────────────┘
 
   CLIENT                          SERVER                      DATABASE
     │                               │                              │
-    ├─[1] POST /auth/login─────────▶                              │
+    ├─[1] POST /auth/login─────────▶                               │
     │   tenant_email                │                              │
     │   tenant_name (optional)      │                              │
     │   password                    │                              │
@@ -1705,8 +1705,8 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
                                 │ (valid credentials)
                                 ▼
                          ┌──────────────┐
-                    ┌───▶│ AUTHENTICATED│◄───┐
-                    │    └──────┬───────┘    │
+                    ┌───▶│ AUTHENTICATED│◄────┐
+                    │    └──────┬───────┘     │
                     │           │             │
                     │           │             │
     POST /auth/refresh          │             │ GET /protected/*
@@ -1714,8 +1714,8 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
                                 │             │
                                 │             │
                                 ▼             │
-                         ┌──────────────┐    │
-                         │ TOKEN EXPIRED│────┘
+                         ┌──────────────┐     │
+                         │ TOKEN EXPIRED│─────┘
                          └──────┬───────┘
                                 │
                                 │ POST /auth/refresh

@@ -210,12 +210,13 @@ curl -X POST "http://127.0.0.1:8000/auth/login" \
   -H "Content-Type: application/json" \
   -d '{
     "tenant_email": "company@example.com",
+    "tenant_name": "Acme Corporation",
     "password": "securepassword123"
   }'
 ```
 
 **What happens:**
-- Creates new tenant with email `company@example.com`
+- Creates new tenant with email `company@example.com` and name `Acme Corporation`
 - Creates owner user (username=email, role=OWNER)
 - Returns JWT tokens for owner user
 
@@ -288,6 +289,158 @@ curl -X GET "http://127.0.0.1:8000/api/protected/me" \
   "updated_at": "2024-01-15T10:30:00Z"
 }
 ```
+
+#### D. Tenant Management
+
+The service includes comprehensive tenant management endpoints with role-based authorization.
+
+**Authorization Requirements:**
+- **Any role** (OWNER, ADMIN, MEMBER): View tenant info
+- **OWNER or ADMIN**: Update tenant name, list users
+- **OWNER only**: Update tenant status, soft delete tenant
+
+**1. View Current Tenant Info** (Any Role)
+
+```bash
+curl -X GET "http://127.0.0.1:8000/tenants/me" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+```
+
+**Response:**
+```json
+{
+  "id": 5,
+  "email": "company@example.com",
+  "tenant_name": "Acme Corporation",
+  "is_active": true,
+  "created_at": "2026-01-12T15:30:00Z",
+  "updated_at": "2026-01-12T15:30:00Z"
+}
+```
+
+**2. Update Tenant Name** (OWNER or ADMIN)
+
+```bash
+curl -X PUT "http://127.0.0.1:8000/tenants/me" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tenant_name": "Acme Corp - New Name"
+  }'
+```
+
+**Response:**
+```json
+{
+  "id": 5,
+  "email": "company@example.com",
+  "tenant_name": "Acme Corp - New Name",
+  "is_active": true,
+  "created_at": "2026-01-12T15:30:00Z",
+  "updated_at": "2026-01-12T15:35:00Z"
+}
+```
+
+**Authorization Error (if MEMBER tries):**
+```json
+{
+  "detail": "Insufficient permissions. OWNER or ADMIN role required."
+}
+```
+
+**3. List All Users in Tenant** (OWNER or ADMIN)
+
+```bash
+curl -X GET "http://127.0.0.1:8000/tenants/me/users" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+```
+
+**Response:**
+```json
+[
+  {
+    "id": 4,
+    "tenant_id": 5,
+    "username": "company@example.com",
+    "email": "company@example.com",
+    "role": "OWNER",
+    "is_totp_enabled": false,
+    "is_active": true,
+    "created_at": "2026-01-12T15:30:00Z",
+    "updated_at": "2026-01-12T15:30:00Z"
+  },
+  {
+    "id": 5,
+    "tenant_id": 5,
+    "username": "alice",
+    "email": "alice@company.com",
+    "role": "ADMIN",
+    "is_totp_enabled": false,
+    "is_active": true,
+    "created_at": "2026-01-12T16:00:00Z",
+    "updated_at": "2026-01-12T16:00:00Z"
+  }
+]
+```
+
+**4. Deactivate Tenant** (OWNER Only)
+
+```bash
+curl -X PATCH "http://127.0.0.1:8000/tenants/me/status" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "is_active": false
+  }'
+```
+
+**Response:**
+```json
+{
+  "id": 5,
+  "email": "company@example.com",
+  "tenant_name": "Acme Corporation",
+  "is_active": false,
+  "created_at": "2026-01-12T15:30:00Z",
+  "updated_at": "2026-01-12T15:40:00Z"
+}
+```
+
+**Warning:** Once deactivated, all users in the tenant will be unable to log in. The tenant owner will need administrative intervention to reactivate.
+
+**5. Reactivate Tenant** (OWNER Only - Requires Manual Database Update)
+
+If a tenant is deactivated, reactivation requires manual database intervention since the authentication system blocks inactive tenants:
+
+```bash
+# Manual reactivation via database
+sqlite3 mcp_auth.db "UPDATE tenants SET is_active = 1 WHERE id = 5;"
+```
+
+**6. Soft Delete Tenant** (OWNER Only)
+
+```bash
+curl -X DELETE "http://127.0.0.1:8000/tenants/me" \
+  -H "Authorization: Bearer $ACCESS_TOKEN"
+```
+
+**Response:** 204 No Content (empty response body)
+
+**What happens:**
+- Tenant is marked as `is_active = false` (soft delete)
+- All users in the tenant can no longer log in
+- Tenant data is preserved in the database
+- This is **not a hard delete** - data can be recovered by reactivating
+
+**Role-Based Authorization Matrix:**
+
+| Endpoint | Method | OWNER | ADMIN | MEMBER |
+|----------|--------|-------|-------|--------|
+| `/tenants/me` | GET | ✅ | ✅ | ✅ |
+| `/tenants/me` | PUT | ✅ | ✅ | ❌ |
+| `/tenants/me/status` | PATCH | ✅ | ❌ | ❌ |
+| `/tenants/me` | DELETE | ✅ | ❌ | ❌ |
+| `/tenants/me/users` | GET | ✅ | ✅ | ❌ |
 
 ## Troubleshooting
 

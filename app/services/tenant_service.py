@@ -13,6 +13,7 @@ def authenticate_or_create_tenant(
     db: Session,
     tenant_email: str,
     password: str,
+    tenant_name: str | None = None,
 ) -> tuple[Tenant, User, bool]:
     """
     Authenticate tenant by email + password, or create new tenant if doesn't exist.
@@ -20,7 +21,7 @@ def authenticate_or_create_tenant(
     This is the core tenant-based authentication flow:
     1. Look up tenant by email (case-insensitive)
     2. If NOT found:
-       - Create tenant with email + password_hash
+       - Create tenant with email + password_hash + tenant_name
        - Create owner user (username=email, email=email, password_hash, role=OWNER)
        - Return (tenant, owner, True) to indicate new tenant
     3. If found:
@@ -32,6 +33,7 @@ def authenticate_or_create_tenant(
         db: Database session
         tenant_email: Tenant's email address
         password: Plain text password
+        tenant_name: Tenant's organization name (optional)
 
     Returns:
         Tuple of (tenant, owner_user, is_new_tenant)
@@ -43,7 +45,7 @@ def authenticate_or_create_tenant(
         AuthenticationError: If tenant exists but password is invalid or tenant/user is inactive
 
     Example:
-        >>> tenant, owner, is_new = authenticate_or_create_tenant(db, "company@example.com", "secret")
+        >>> tenant, owner, is_new = authenticate_or_create_tenant(db, "company@example.com", "secret", "Acme Corp")
         >>> if is_new:
         ...     print(f"Created new tenant: {tenant.email}")
         ... else:
@@ -58,6 +60,7 @@ def authenticate_or_create_tenant(
             db=db,
             email=tenant_email,
             password=password,
+            tenant_name=tenant_name,
         )
         return tenant, owner, True
 
@@ -85,6 +88,7 @@ def create_tenant_with_owner(
     db: Session,
     email: str,
     password: str,
+    tenant_name: str | None = None,
     username: str | None = None,
 ) -> tuple[Tenant, User]:
     """
@@ -100,13 +104,14 @@ def create_tenant_with_owner(
         db: Database session
         email: Tenant's email address (globally unique)
         password: Plain text password
+        tenant_name: Tenant's organization name (optional)
         username: Owner's username, defaults to email if None
 
     Returns:
         Tuple of (tenant, owner_user)
 
     Example:
-        >>> tenant, owner = create_tenant_with_owner(db, "company@example.com", "secret")
+        >>> tenant, owner = create_tenant_with_owner(db, "company@example.com", "secret", "Acme Corp")
         >>> print(f"Created tenant {tenant.id} with owner {owner.username}")
     """
     # Hash password once for both tenant and owner
@@ -117,6 +122,7 @@ def create_tenant_with_owner(
         db=db,
         email=email,
         password_hash=password_hash,
+        tenant_name=tenant_name,
     )
 
     # Create owner user
