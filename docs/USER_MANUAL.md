@@ -1429,6 +1429,8 @@ curl -X GET "http://127.0.0.1:8000/tenants/me" \
 
 **Authorization**: OWNER or ADMIN role required
 
+**✨ Cascade Behavior**: When you update the tenant name, it automatically cascades to ALL users in the tenant. The `tenant_name` field in each user's record is updated automatically.
+
 **Headers:**
 ```
 Authorization: Bearer <access_token>
@@ -1474,7 +1476,12 @@ curl -X PUT "http://127.0.0.1:8000/tenants/me" \
 
 **Authorization**: OWNER role required
 
-**⚠️ Warning**: Deactivating a tenant will prevent all users in the tenant from logging in.
+**⚠️ Warning**: Deactivating a tenant will automatically deactivate ALL users in the tenant and prevent them from logging in.
+
+**✨ Cascade Behavior**:
+- When you **deactivate** a tenant (`is_active: false`), ALL users are automatically deactivated
+- When you **reactivate** a tenant (`is_active: true`), ALL users are automatically reactivated
+- This ensures tenant and user statuses remain synchronized
 
 **Headers:**
 ```
@@ -1528,7 +1535,9 @@ curl -X PATCH "http://127.0.0.1:8000/tenants/me/status" \
 
 **Authorization**: OWNER role required
 
-**⚠️ Important**: This is a soft delete - the tenant is marked as inactive but not removed from the database. All users in this tenant will be unable to log in.
+**⚠️ Important**: This is a soft delete - the tenant is marked as inactive but not removed from the database. All users in this tenant will be automatically deactivated and unable to log in.
+
+**✨ Cascade Behavior**: When you soft-delete a tenant, ALL users in the tenant are automatically deactivated (`is_active: false`). The data is preserved for potential reactivation but all access is blocked.
 
 **Headers:**
 ```

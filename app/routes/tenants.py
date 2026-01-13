@@ -9,6 +9,7 @@ from app.models.user import User
 from app.repositories import tenant_repository, user_repository
 from app.schemas.tenant import TenantResponse, TenantStatusUpdate, TenantUpdate
 from app.schemas.user import UserResponse
+from app.services import tenant_service
 
 router = APIRouter(prefix="/tenants", tags=["Tenants"])
 
@@ -78,8 +79,8 @@ async def update_my_tenant(
         HTTPException 403: If user is not OWNER or ADMIN
         HTTPException 404: If tenant not found
     """
-    # Update tenant
-    updated_tenant = tenant_repository.update(
+    # Update tenant and cascade to users
+    updated_tenant, users_affected = tenant_service.update_tenant_with_cascade(
         db=db,
         tenant_id=user.tenant_id,
         tenant_name=update_data.tenant_name,
@@ -110,7 +111,8 @@ async def update_my_tenant_status(
 
     **Authorization**: OWNER role required
 
-    **Warning**: Deactivating a tenant will prevent all users in the tenant from logging in.
+    **Warning**: Deactivating a tenant will automatically deactivate ALL users in the tenant.
+    This prevents any user from logging in until the tenant is reactivated.
 
     Args:
         status_data: Status update data (is_active: true/false)
@@ -125,8 +127,8 @@ async def update_my_tenant_status(
         HTTPException 403: If user is not OWNER
         HTTPException 404: If tenant not found
     """
-    # Update tenant status
-    updated_tenant = tenant_repository.update_status(
+    # Update tenant status and cascade to all users
+    updated_tenant, users_affected = tenant_service.update_tenant_status_with_cascade(
         db=db,
         tenant_id=user.tenant_id,
         is_active=status_data.is_active,
@@ -158,7 +160,7 @@ async def delete_my_tenant(
 
     **Important**: This is a soft delete - the tenant is marked as inactive
     but not removed from the database. All users in this tenant will be
-    unable to log in.
+    automatically deactivated and unable to log in.
 
     Args:
         user: Current authenticated user with OWNER role
@@ -169,8 +171,8 @@ async def delete_my_tenant(
         HTTPException 403: If user is not OWNER
         HTTPException 404: If tenant not found
     """
-    # Deactivate tenant (soft delete)
-    updated_tenant = tenant_repository.update_status(
+    # Deactivate tenant and cascade to all users (soft delete)
+    updated_tenant, users_affected = tenant_service.update_tenant_status_with_cascade(
         db=db,
         tenant_id=user.tenant_id,
         is_active=False,

@@ -139,3 +139,159 @@ def create_tenant_with_owner(
     )
 
     return tenant, owner
+
+
+def update_tenant_with_cascade(
+    db: Session,
+    tenant_id: int,
+    tenant_name: str | None = None,
+) -> tuple[Tenant, int]:
+    """
+    Update tenant information and cascade tenant_name to all users.
+
+    This function performs a coordinated update:
+    1. Updates the tenant's tenant_name
+    2. Cascades the tenant_name to all users in the tenant (denormalized field)
+    3. Returns both the updated tenant and count of affected users
+
+    Transaction Safety: If tenant update fails, user updates are not attempted.
+    If user updates fail, changes are rolled back.
+
+    Args:
+        db: Database session
+        tenant_id: Tenant's ID
+        tenant_name: New tenant name (optional)
+
+    Returns:
+        Tuple of (updated_tenant, users_affected_count)
+
+    Raises:
+        ValueError: If tenant not found
+        SQLAlchemyError: If database update fails
+
+    Example:
+        >>> tenant, count = update_tenant_with_cascade(db, 1, "New Company Name")
+        >>> print(f"Updated tenant and {count} users")
+    """
+    from sqlalchemy.exc import SQLAlchemyError
+
+    try:
+        # Update tenant first
+        updated_tenant = tenant_repository.update(
+            db=db,
+            tenant_id=tenant_id,
+            tenant_name=tenant_name,
+        )
+
+        if not updated_tenant:
+            raise ValueError(f"Tenant with id {tenant_id} not found")
+
+        # Cascade tenant_name to all users
+        users_affected = 0
+        if tenant_name is not None:
+            users_affected = user_repository.bulk_update_tenant_name(
+                db=db,
+                tenant_id=tenant_id,
+                new_tenant_name=tenant_name,
+            )
+
+        return updated_tenant, users_affected
+
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise
+
+
+def update_tenant_status_with_cascade(
+    db: Session,
+    tenant_id: int,
+    is_active: bool,
+) -> tuple[Tenant, int]:
+    """
+    Update tenant status and cascade to all users.
+
+    This function performs a coordinated status update:
+    1. Updates the tenant's is_active status
+    2. Cascades the same is_active status to ALL users in the tenant
+    3. Returns both the updated tenant and count of affected users
+
+    **Important**: This ensures tenant and user statuses are synchronized.
+    When a tenant is deactivated, all users are automatically deactivated.
+    When a tenant is reactivated, all users are automatically reactivated.
+
+    Transaction Safety: All updates are performed in a single transaction.
+    If any operation fails, all changes are rolled back.
+
+    Args:
+        db: Database session
+        tenant_id: Tenant's ID
+        is_active: New active status (True = active, False = inactive)
+
+    Returns:
+        Tuple of (updated_tenant, users_affected_count)
+
+    Raises:
+        ValueError: If tenant not found
+        SQLAlchemyError: If database update fails
+
+    Example:
+        >>> tenant, count = update_tenant_status_with_cascade(db, 1, False)
+        >>> print(f"Deactivated tenant and {count} users")
+    """
+    from sqlalchemy.exc import SQLAlchemyError
+
+    try:
+        # Update tenant status first
+        updated_tenant = tenant_repository.update_status(
+            db=db,
+            tenant_id=tenant_id,
+            is_active=is_active,
+        )
+
+        if not updated_tenant:
+            raise ValueError(f"Tenant with id {tenant_id} not found")
+
+        # Cascade status to all users
+        users_affected = user_repository.bulk_update_user_status(
+            db=db,
+            tenant_id=tenant_id,
+            is_active=is_active,
+        )
+
+        return updated_tenant, users_affected
+
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise
+
+
+def get_cascade_impact(db: Session, tenant_id: int) -> dict:
+    """
+    Get information about how many users will be affected by a cascade operation.
+
+    This is a read-only function to provide impact analysis before performing
+    cascade updates. Useful for UI confirmations and audit logging.
+
+    Args:
+        db: Database session
+        tenant_id: Tenant's ID
+
+    Returns:
+        Dictionary with impact information:
+        - total_users: Total number of users in tenant
+        - active_users: Number of active users
+        - inactive_users: Number of inactive users
+
+    Example:
+        >>> impact = get_cascade_impact(db, tenant_id=1)
+        >>> print(f"This will affect {impact['total_users']} users")
+    """
+    total = user_repository.count_affected_users(db, tenant_id)
+    active = user_repository.count_tenant_users(db, tenant_id)  # Already exists - counts active only
+    inactive = total - active
+
+    return {
+        "total_users": total,
+        "active_users": active,
+        "inactive_users": inactive,
+    }

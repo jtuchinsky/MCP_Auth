@@ -212,11 +212,13 @@ CREATE UNIQUE INDEX ix_tenants_email ON tenants(email);
    - Optional display name for organization (e.g., "Acme Corporation")
    - Can be set during first login or updated later
    - Nullable - defaults to NULL if not provided
+   - **CASCADE BEHAVIOR**: When updated, automatically propagates to all users' `tenant_name` field
 
 5. **Active Status**
    - `is_active=False` disables tenant and all associated users
    - Used for soft deletion or account suspension
    - Does not delete data (hard delete via CASCADE)
+   - **CASCADE BEHAVIOR**: When tenant is deactivated/reactivated, all users automatically inherit the same status
 
 #### Example Data
 
@@ -482,7 +484,13 @@ CREATE INDEX ix_users_tenant_id ON users(tenant_id);
    - Setup flow: generate secret → save to DB → user verifies → enable
    - Login requires TOTP code if enabled
 
-6. **Cascade Deletion**
+6. **Cascade Updates**
+   - **tenant_name**: When tenant's name changes, all users' `tenant_name` updated automatically
+   - **is_active**: When tenant deactivated/reactivated, all users inherit same status automatically
+   - Implemented via `bulk_update_tenant_name()` and `bulk_update_user_status()` repository functions
+   - Single SQL UPDATE statement per cascade operation for efficiency
+
+7. **Cascade Deletion**
    - Deleting tenant deletes all associated users
    - Deleting user deletes all associated refresh tokens
    - Database-level CASCADE for data integrity
@@ -1213,12 +1221,20 @@ CREATE TABLE api_keys (
 ### Repositories (Data Access Layer)
 
 - `app/repositories/tenant_repository.py` - Tenant CRUD operations (create, get, update, update_status)
-- `app/repositories/user_repository.py` - User CRUD operations
+- `app/repositories/user_repository.py` - User CRUD operations + bulk update functions:
+  - `bulk_update_tenant_name()` - Updates tenant_name for all users in a tenant
+  - `bulk_update_user_status()` - Updates is_active for all users in a tenant
+  - `count_affected_users()` - Counts total users in a tenant
 - `app/repositories/token_repository.py` - Token management
 
 ### Services (Business Logic)
 
-- `app/services/tenant_service.py` - Tenant operations
+- `app/services/tenant_service.py` - Tenant operations + cascade update functions:
+  - `create_tenant_with_owner()` - Creates tenant and owner user
+  - `authenticate_or_create_tenant()` - Login or auto-create tenant
+  - `update_tenant_with_cascade()` - Updates tenant and cascades tenant_name to users
+  - `update_tenant_status_with_cascade()` - Updates tenant status and cascades to users
+  - `get_cascade_impact()` - Returns user count impact before cascade
 - `app/services/auth_service.py` - Authentication logic
 - `app/services/jwt_service.py` - JWT token creation/validation
 
@@ -1226,8 +1242,10 @@ CREATE TABLE api_keys (
 
 - `tests/unit/test_tenant_repository.py` - Tenant repository tests
 - `tests/unit/test_tenant_service.py` - Tenant service tests
+- `tests/unit/test_cascade_updates.py` - Cascade update tests (bulk updates, service coordination)
 - `tests/unit/test_database.py` - Schema validation tests
 - `tests/integration/test_auth_endpoints.py` - Authentication API tests
+- `tests/integration/test_tenant_cascade_endpoints.py` - Tenant cascade endpoint tests
 
 ### External Documentation
 

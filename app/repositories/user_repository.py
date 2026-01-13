@@ -283,3 +283,82 @@ def count_tenant_users(db: Session, tenant_id: int) -> int:
         .filter(User.tenant_id == tenant_id, User.is_active == True)
         .count()
     )
+
+
+def bulk_update_tenant_name(db: Session, tenant_id: int, new_tenant_name: str | None) -> int:
+    """
+    Update tenant_name for all users in a tenant.
+
+    This is a bulk update operation that updates the denormalized tenant_name
+    field for all users belonging to a specific tenant. Used when the tenant's
+    organization name changes to maintain data consistency.
+
+    Uses SQLAlchemy's bulk UPDATE for efficiency (single SQL statement).
+
+    Args:
+        db: Database session
+        tenant_id: Tenant's ID
+        new_tenant_name: New tenant name to set for all users
+
+    Returns:
+        Number of users updated
+
+    Example:
+        >>> count = bulk_update_tenant_name(db, tenant_id=1, new_tenant_name="Acme Corp")
+        >>> print(f"Updated {count} users")
+    """
+    result = db.query(User).filter(User.tenant_id == tenant_id).update(
+        {"tenant_name": new_tenant_name}
+    )
+    db.commit()
+    return result
+
+
+def bulk_update_user_status(db: Session, tenant_id: int, is_active: bool) -> int:
+    """
+    Update is_active status for all users in a tenant.
+
+    This is a bulk update operation that activates or deactivates all users
+    belonging to a specific tenant. Used when the tenant is activated or
+    deactivated to cascade the status change to all users.
+
+    Uses SQLAlchemy's bulk UPDATE for efficiency (single SQL statement).
+
+    Args:
+        db: Database session
+        tenant_id: Tenant's ID
+        is_active: New active status (True = active, False = inactive)
+
+    Returns:
+        Number of users updated
+
+    Example:
+        >>> count = bulk_update_user_status(db, tenant_id=1, is_active=False)
+        >>> print(f"Deactivated {count} users")
+    """
+    result = db.query(User).filter(User.tenant_id == tenant_id).update(
+        {"is_active": is_active}
+    )
+    db.commit()
+    return result
+
+
+def count_affected_users(db: Session, tenant_id: int) -> int:
+    """
+    Count how many users would be affected by a bulk update operation.
+
+    Used before performing cascade operations to determine impact and
+    provide feedback about how many accounts will be affected.
+
+    Args:
+        db: Database session
+        tenant_id: Tenant's ID
+
+    Returns:
+        Number of users in the tenant (both active and inactive)
+
+    Example:
+        >>> count = count_affected_users(db, tenant_id=1)
+        >>> print(f"This operation will affect {count} users")
+    """
+    return db.query(User).filter(User.tenant_id == tenant_id).count()

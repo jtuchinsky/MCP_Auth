@@ -1,7 +1,7 @@
 # MCP Auth - Workflows Documentation
 
 **Version:** 0.1.0
-**Last Updated:** January 12, 2026
+**Last Updated:** January 13, 2026
 **Status:** Production Ready
 
 ---
@@ -18,8 +18,11 @@
 8. [TOTP Disable Workflow](#8-totp-disable-workflow)
 9. [Protected Endpoint Access](#9-protected-endpoint-access)
 10. [Logout Workflow](#10-logout-workflow)
-11. [Error Handling Patterns](#11-error-handling-patterns)
-12. [State Diagrams](#12-state-diagrams)
+11. [Tenant Update Workflow](#11-tenant-update-workflow)
+12. [Tenant Status Update Workflow](#12-tenant-status-update-workflow)
+13. [Tenant Deletion Workflow](#13-tenant-deletion-workflow)
+14. [Error Handling Patterns](#14-error-handling-patterns)
+15. [State Diagrams](#15-state-diagrams)
 
 ---
 
@@ -27,7 +30,7 @@
 
 ### 1.1 Workflow Categories
 
-MCP Auth implements three categories of workflows:
+MCP Auth implements four categories of workflows:
 
 | Category | Workflows | Description |
 |----------|-----------|-------------|
@@ -35,6 +38,7 @@ MCP Auth implements three categories of workflows:
 | **Token Management** | Token Refresh, Logout | Access token lifecycle |
 | **Security** | TOTP Setup, TOTP Disable | Two-factor authentication |
 | **Authorization** | Protected Endpoint Access | Resource access control |
+| **Tenant Management** | Tenant Update, Status Update, Deletion | Tenant CRUD with cascade updates |
 
 ### 1.2 Workflow Symbols
 
@@ -1552,9 +1556,736 @@ The refresh token is revoked in the database and **cannot be used** to obtain ne
 
 ---
 
-## 11. Error Handling Patterns
+## 11. Tenant Update Workflow
 
-### 11.1 Common Error Responses
+### 11.1 Workflow Overview
+
+**Purpose**: Update tenant information (tenant_name) with automatic cascade to all users.
+
+**Trigger**: OWNER or ADMIN user updates tenant details.
+
+**Result**: Tenant updated + tenant_name cascaded to ALL users in the tenant.
+
+### 11.2 Flow Diagram
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│              TENANT UPDATE WORKFLOW (with Cascade)               │
+└──────────────────────────────────────────────────────────────────┘
+
+  CLIENT                          SERVER                      DATABASE
+    │                               │                              │
+    ├─[1] PUT /tenants/me──────────▶                               │
+    │   Authorization: Bearer token │                              │
+    │   tenant_name: "New Name"     │                              │
+    │                               │                              │
+    │                               ├─[2] Verify access token─────▶│
+    │                               │     Extract user_id          │
+    │                               │                              │
+    │                               ├─[3] Get user────────────────▶│
+    │                               │                              │
+    │                               │◄─[4] Return user─────────────┤
+    │                               │                              │
+    │                               │   ◆ User role OWNER/ADMIN?   │
+    │                               │   ├─✗ No → 403 Forbidden     │
+    │                               │   └─✓ Yes ↓                  │
+    │                               │                              │
+    │                               ├─[5] Update tenant───────────▶│
+    │                               │     UPDATE tenants           │
+    │                               │     SET tenant_name = ?      │
+    │                               │     WHERE id = ?             │
+    │                               │                              │
+    │                               │◄─[6] Return updated tenant───┤
+    │                               │                              │
+    │                               ├─[7] Cascade to users────────▶│
+    │                               │     UPDATE users             │
+    │                               │     SET tenant_name = ?      │
+    │                               │     WHERE tenant_id = ?      │
+    │                               │                              │
+    │                               │◄─[8] Return users affected───┤
+    │                               │     (count)                  │
+    │                               │                              │
+    │◄──[9] Return response─────────┤                              │
+    │   {                           │                              │
+    │     tenant_name: "New Name",  │                              │
+    │     ... other fields          │                              │
+    │   }                           │                              │
+    │                               │                              │
+    └───────────────────────────────┴──────────────────────────────┘
+```
+
+### 11.3 Step-by-Step Walkthrough
+
+#### Step 1: Client Sends Update Request
+
+```http
+PUT /tenants/me HTTP/1.1
+Host: 127.0.0.1:8000
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+
+{
+  "tenant_name": "Acme Corporation Inc"
+}
+```
+
+#### Step 2-4: Verify Authorization
+
+```python
+from app.dependencies import require_admin_or_owner
+
+# Dependency injection ensures user is OWNER or ADMIN
+user = require_admin_or_owner(token)
+
+# If user is MEMBER, raises:
+# HTTPException(403, "This endpoint requires ADMIN or OWNER role")
+```
+
+#### Step 5-6: Update Tenant
+
+```python
+from app.services import tenant_service
+
+# Service layer coordinates tenant + user updates
+updated_tenant, users_affected = tenant_service.update_tenant_with_cascade(
+    db=db,
+    tenant_id=user.tenant_id,
+    tenant_name="Acme Corporation Inc"
+)
+```
+
+**SQL Executed:**
+```sql
+-- Step 5: Update tenant
+UPDATE tenants
+SET tenant_name = 'Acme Corporation Inc',
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 2;
+```
+
+#### Step 7-8: Cascade Update to Users
+
+```python
+# Service automatically cascades to all users
+# Using bulk UPDATE for efficiency (single SQL statement)
+users_affected = user_repository.bulk_update_tenant_name(
+    db=db,
+    tenant_id=user.tenant_id,
+    new_tenant_name="Acme Corporation Inc"
+)
+# Returns count of users updated
+```
+
+**SQL Executed:**
+```sql
+-- Step 7: Bulk update all users in tenant
+UPDATE users
+SET tenant_name = 'Acme Corporation Inc'
+WHERE tenant_id = 2;
+
+-- If tenant has 5 users, all 5 are updated in one statement
+```
+
+#### Step 9: Return Response
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "id": 2,
+  "email": "acme@example.com",
+  "tenant_name": "Acme Corporation Inc",
+  "is_active": true,
+  "created_at": "2026-01-10T08:00:00Z",
+  "updated_at": "2026-01-13T14:30:00Z"
+}
+```
+
+### 11.4 Database State Changes
+
+**Before Update:**
+```sql
+SELECT id, email, tenant_name FROM tenants WHERE id = 2;
+-- 2 | acme@example.com | Acme Corporation
+
+SELECT id, username, tenant_name FROM users WHERE tenant_id = 2;
+-- 1 | acme@example.com | NULL
+-- 2 | alice           | NULL
+-- 3 | bob             | NULL
+```
+
+**After Update:**
+```sql
+SELECT id, email, tenant_name FROM tenants WHERE id = 2;
+-- 2 | acme@example.com | Acme Corporation Inc
+
+SELECT id, username, tenant_name FROM users WHERE tenant_id = 2;
+-- 1 | acme@example.com | Acme Corporation Inc
+-- 2 | alice           | Acme Corporation Inc
+-- 3 | bob             | Acme Corporation Inc
+```
+
+### 11.5 Cascade Behavior
+
+**✨ Key Feature: Automatic Synchronization**
+
+The `tenant_name` field in the users table is denormalized (copied from tenant) for query performance. The cascade update ensures this field stays synchronized:
+
+- **Single Tenant Updated** → All users in that tenant updated
+- **Atomic Operation** → Both succeed or both fail (transaction safety)
+- **Efficient Execution** → Single SQL UPDATE statement for all users
+- **Tenant Isolation** → Only affects users in the target tenant
+
+**Transaction Safety:**
+```python
+try:
+    # 1. Update tenant
+    updated_tenant = tenant_repository.update(db, tenant_id, tenant_name)
+
+    # 2. Cascade to users
+    users_affected = user_repository.bulk_update_tenant_name(db, tenant_id, tenant_name)
+
+    # Both succeed together
+    return updated_tenant, users_affected
+except SQLAlchemyError:
+    db.rollback()  # Both fail together
+    raise
+```
+
+### 11.6 Error Scenarios
+
+#### Forbidden - MEMBER Role
+
+```http
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+
+{
+  "detail": "This endpoint requires ADMIN or OWNER role. Your role: MEMBER"
+}
+```
+
+#### Tenant Not Found
+
+```http
+HTTP/1.1 404 Not Found
+Content-Type: application/json
+
+{
+  "detail": "Tenant not found"
+}
+```
+
+#### Validation Error - Empty tenant_name
+
+```http
+HTTP/1.1 422 Unprocessable Entity
+Content-Type: application/json
+
+{
+  "detail": [
+    {
+      "loc": ["body", "tenant_name"],
+      "msg": "ensure this value has at least 1 characters",
+      "type": "value_error.any_str.min_length"
+    }
+  ]
+}
+```
+
+---
+
+## 12. Tenant Status Update Workflow
+
+### 12.1 Workflow Overview
+
+**Purpose**: Activate or deactivate tenant with automatic cascade to all users.
+
+**Trigger**: OWNER user updates tenant status (ADMIN cannot do this).
+
+**Result**: Tenant status updated + is_active cascaded to ALL users in the tenant.
+
+**⚠️ Warning**: Deactivating a tenant will automatically deactivate ALL users, preventing any login until reactivated.
+
+### 12.2 Flow Diagram
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│          TENANT STATUS UPDATE WORKFLOW (with Cascade)            │
+└──────────────────────────────────────────────────────────────────┘
+
+  CLIENT                          SERVER                      DATABASE
+    │                               │                              │
+    ├─[1] PATCH /tenants/me/status─▶                               │
+    │   Authorization: Bearer token │                              │
+    │   is_active: false            │                              │
+    │                               │                              │
+    │                               ├─[2] Verify access token─────▶│
+    │                               │                              │
+    │                               ├─[3] Get user────────────────▶│
+    │                               │                              │
+    │                               │   ◆ User role OWNER?         │
+    │                               │   ├─✗ No → 403 Forbidden     │
+    │                               │   │   (ADMIN NOT allowed)    │
+    │                               │   └─✓ Yes ↓                  │
+    │                               │                              │
+    │                               ├─[4] Update tenant status────▶│
+    │                               │     UPDATE tenants           │
+    │                               │     SET is_active = false    │
+    │                               │                              │
+    │                               │◄─[5] Return updated tenant───┤
+    │                               │                              │
+    │                               ├─[6] Cascade to users────────▶│
+    │                               │     UPDATE users             │
+    │                               │     SET is_active = false    │
+    │                               │     WHERE tenant_id = ?      │
+    │                               │                              │
+    │                               │◄─[7] Return users affected───┤
+    │                               │     (count)                  │
+    │                               │                              │
+    │◄──[8] Return response─────────┤                              │
+    │   {                           │                              │
+    │     is_active: false,         │                              │
+    │     ... other fields          │                              │
+    │   }                           │                              │
+    │                               │                              │
+    └───────────────────────────────┴──────────────────────────────┘
+```
+
+### 12.3 Step-by-Step Walkthrough
+
+#### Step 1: Deactivate Tenant Request
+
+```http
+PATCH /tenants/me/status HTTP/1.1
+Host: 127.0.0.1:8000
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+
+{
+  "is_active": false
+}
+```
+
+#### Step 2-3: Verify OWNER Role
+
+```python
+from app.dependencies import require_owner
+
+# Dependency injection ensures user is OWNER (not ADMIN)
+user = require_owner(token)
+
+# If user is ADMIN or MEMBER, raises:
+# HTTPException(403, "This endpoint requires OWNER role")
+```
+
+**Why OWNER-only?**
+- Deactivating a tenant affects ALL users (high impact)
+- Only tenant owner should have this power
+- Prevents ADMIN from locking out OWNER
+
+#### Step 4-5: Update Tenant Status
+
+```python
+from app.services import tenant_service
+
+updated_tenant, users_affected = tenant_service.update_tenant_status_with_cascade(
+    db=db,
+    tenant_id=user.tenant_id,
+    is_active=False
+)
+```
+
+**SQL Executed:**
+```sql
+UPDATE tenants
+SET is_active = 0,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = 2;
+```
+
+#### Step 6-7: Cascade Status to Users
+
+```python
+# Automatically cascades to all users in tenant
+users_affected = user_repository.bulk_update_user_status(
+    db=db,
+    tenant_id=user.tenant_id,
+    is_active=False
+)
+```
+
+**SQL Executed:**
+```sql
+UPDATE users
+SET is_active = 0
+WHERE tenant_id = 2;
+
+-- If tenant has 5 users, all 5 are deactivated
+```
+
+#### Step 8: Return Response
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "id": 2,
+  "email": "acme@example.com",
+  "tenant_name": "Acme Corporation",
+  "is_active": false,
+  "created_at": "2026-01-10T08:00:00Z",
+  "updated_at": "2026-01-13T15:00:00Z"
+}
+```
+
+### 12.4 Database State Changes
+
+**Deactivation:**
+```sql
+-- Before
+SELECT id, email, is_active FROM tenants WHERE id = 2;
+-- 2 | acme@example.com | 1
+
+SELECT id, username, is_active FROM users WHERE tenant_id = 2;
+-- 1 | acme@example.com | 1
+-- 2 | alice           | 1
+-- 3 | bob             | 1
+
+-- After deactivation
+SELECT id, email, is_active FROM tenants WHERE id = 2;
+-- 2 | acme@example.com | 0
+
+SELECT id, username, is_active FROM users WHERE tenant_id = 2;
+-- 1 | acme@example.com | 0  (OWNER deactivated too!)
+-- 2 | alice           | 0
+-- 3 | bob             | 0
+```
+
+**Reactivation:**
+```sql
+-- Reactivate tenant via API (as OWNER with manual DB intervention)
+PATCH /tenants/me/status
+{ "is_active": true }
+
+-- After reactivation
+SELECT id, username, is_active FROM users WHERE tenant_id = 2;
+-- 1 | acme@example.com | 1  (All users reactivated)
+-- 2 | alice           | 1
+-- 3 | bob             | 1
+```
+
+### 12.5 Cascade Behavior
+
+**Deactivation Cascade:**
+- Tenant deactivated → **ALL users deactivated** (including OWNER)
+- Users cannot login until tenant is reactivated
+- Existing access tokens remain valid until expiration (15 min)
+- Refresh tokens can still be used (but login returns 403)
+
+**Reactivation Cascade:**
+- Tenant reactivated → **ALL users reactivated**
+- Users can login immediately
+- No manual intervention needed per user
+
+**Important Notes:**
+1. **OWNER is also deactivated** when tenant is deactivated
+2. **Manual DB access required** to reactivate tenant if OWNER is deactivated
+3. **Soft deactivation** - no data is deleted, just marked inactive
+
+### 12.6 Error Scenarios
+
+#### Forbidden - ADMIN Role Attempting Status Change
+
+```http
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+
+{
+  "detail": "This endpoint requires OWNER role. Your role: ADMIN"
+}
+```
+
+#### Login Attempt with Inactive Tenant
+
+```http
+POST /auth/login
+{ "tenant_email": "acme@example.com", "password": "..." }
+
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+
+{
+  "detail": "Tenant account is inactive"
+}
+```
+
+#### Protected Endpoint with Inactive User
+
+```http
+GET /api/protected/me
+Authorization: Bearer {valid_token}
+
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+
+{
+  "detail": "User account is inactive"
+}
+```
+
+---
+
+## 13. Tenant Deletion Workflow
+
+### 13.1 Workflow Overview
+
+**Purpose**: Soft delete tenant by marking as inactive (with cascade to users).
+
+**Trigger**: OWNER user deletes tenant account.
+
+**Result**: Tenant + ALL users marked as inactive (soft delete, data preserved).
+
+**⚠️ Important**: This is a **soft delete** - data is not removed, just marked inactive. Requires manual DB intervention to reactivate.
+
+### 13.2 Flow Diagram
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│            TENANT DELETION WORKFLOW (Soft Delete + Cascade)      │
+└──────────────────────────────────────────────────────────────────┘
+
+  CLIENT                          SERVER                      DATABASE
+    │                               │                              │
+    ├─[1] DELETE /tenants/me───────▶                               │
+    │   Authorization: Bearer token │                              │
+    │                               │                              │
+    │                               ├─[2] Verify access token─────▶│
+    │                               │                              │
+    │                               ├─[3] Get user────────────────▶│
+    │                               │                              │
+    │                               │   ◆ User role OWNER?         │
+    │                               │   ├─✗ No → 403 Forbidden     │
+    │                               │   └─✓ Yes ↓                  │
+    │                               │                              │
+    │                               ├─[4] Soft delete tenant──────▶│
+    │                               │     UPDATE tenants           │
+    │                               │     SET is_active = false    │
+    │                               │     (NOT DELETE!)            │
+    │                               │                              │
+    │                               │◄─[5] Return updated tenant───┤
+    │                               │                              │
+    │                               ├─[6] Cascade to users────────▶│
+    │                               │     UPDATE users             │
+    │                               │     SET is_active = false    │
+    │                               │     WHERE tenant_id = ?      │
+    │                               │     (NOT DELETE!)            │
+    │                               │                              │
+    │                               │◄─[7] Return users affected───┤
+    │                               │                              │
+    │◄──[8] Return 204 No Content───┤                              │
+    │                               │                              │
+    └───────────────────────────────┴──────────────────────────────┘
+```
+
+### 13.3 Step-by-Step Walkthrough
+
+#### Step 1: Client Sends Delete Request
+
+```http
+DELETE /tenants/me HTTP/1.1
+Host: 127.0.0.1:8000
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+#### Step 2-3: Verify OWNER Role
+
+```python
+from app.dependencies import require_owner
+
+user = require_owner(token)
+
+# Only OWNER can delete tenant
+# ADMIN cannot delete (too destructive)
+```
+
+#### Step 4-7: Soft Delete with Cascade
+
+```python
+from app.services import tenant_service
+
+# DELETE endpoint uses the same cascade function as PATCH
+updated_tenant, users_affected = tenant_service.update_tenant_status_with_cascade(
+    db=db,
+    tenant_id=user.tenant_id,
+    is_active=False  # Mark inactive, don't delete
+)
+```
+
+**SQL Executed (Soft Delete):**
+```sql
+-- Soft delete tenant
+UPDATE tenants
+SET is_active = 0
+WHERE id = 2;
+
+-- Cascade to all users
+UPDATE users
+SET is_active = 0
+WHERE tenant_id = 2;
+
+-- NO DELETE statements - data preserved!
+```
+
+#### Step 8: Return Response
+
+```http
+HTTP/1.1 204 No Content
+```
+
+**Note**: 204 means success with no response body (standard for DELETE).
+
+### 13.4 Soft Delete vs Hard Delete
+
+| Aspect | Soft Delete (Implemented) | Hard Delete (Not Implemented) |
+|--------|---------------------------|-------------------------------|
+| **SQL** | `UPDATE SET is_active = 0` | `DELETE FROM tenants` |
+| **Data** | Preserved in database | Permanently removed |
+| **Recovery** | Can be reactivated | Cannot be recovered |
+| **Cascade** | Users also inactive | Users also deleted (CASCADE constraint) |
+| **Audit** | Full history retained | History lost |
+| **Risk** | Low (reversible) | High (irreversible) |
+
+**Why Soft Delete?**
+1. ✅ **Data safety** - no accidental permanent loss
+2. ✅ **Audit trail** - preserve history for compliance
+3. ✅ **Reversible** - can reactivate if needed
+4. ✅ **Cascade safety** - users also preserved
+5. ⚠️ **Trade-off** - requires manual cleanup of old inactive records
+
+### 13.5 Database State Changes
+
+**Before Deletion:**
+```sql
+SELECT id, email, tenant_name, is_active FROM tenants WHERE id = 2;
+-- 2 | acme@example.com | Acme Corporation | 1
+
+SELECT id, username, email, is_active FROM users WHERE tenant_id = 2;
+-- 1 | acme@example.com | acme@example.com | 1
+-- 2 | alice           | alice@acme.com   | 1
+-- 3 | bob             | bob@acme.com     | 1
+```
+
+**After Soft Deletion:**
+```sql
+SELECT id, email, tenant_name, is_active FROM tenants WHERE id = 2;
+-- 2 | acme@example.com | Acme Corporation | 0  (Still exists!)
+
+SELECT id, username, email, is_active FROM users WHERE tenant_id = 2;
+-- 1 | acme@example.com | acme@example.com | 0  (Still exists!)
+-- 2 | alice           | alice@acme.com   | 0
+-- 3 | bob             | bob@acme.com     | 0
+```
+
+**Key Observation:**
+- All records still in database
+- Email addresses preserved (for audit)
+- Tenant name preserved
+- All relationships intact
+- Only `is_active` changed to 0
+
+### 13.6 Post-Deletion Behavior
+
+#### Login Attempts Fail
+
+```http
+POST /auth/login
+{
+  "tenant_email": "acme@example.com",
+  "password": "SecurePassword123!"
+}
+
+HTTP/1.1 403 Forbidden
+{
+  "detail": "Tenant account is inactive"
+}
+```
+
+#### Existing Tokens Fail
+
+```http
+GET /api/protected/me
+Authorization: Bearer {previously_valid_token}
+
+HTTP/1.1 403 Forbidden
+{
+  "detail": "User account is inactive"
+}
+```
+
+#### Refresh Token Fails
+
+```http
+POST /auth/refresh
+{
+  "refresh_token": "..."
+}
+
+HTTP/1.1 403 Forbidden
+{
+  "detail": "User account is inactive"
+}
+```
+
+### 13.7 Reactivation Process
+
+**Manual reactivation** requires direct database access:
+
+```sql
+-- Reactivate tenant
+UPDATE tenants
+SET is_active = 1
+WHERE id = 2;
+
+-- Reactivate all users in tenant
+UPDATE users
+SET is_active = 1
+WHERE tenant_id = 2;
+```
+
+**Future Enhancement**: Add `POST /admin/tenants/{id}/reactivate` endpoint for admin panel.
+
+### 13.8 Error Scenarios
+
+#### Forbidden - ADMIN Role Attempting Delete
+
+```http
+HTTP/1.1 403 Forbidden
+Content-Type: application/json
+
+{
+  "detail": "This endpoint requires OWNER role. Your role: ADMIN"
+}
+```
+
+#### Tenant Not Found
+
+```http
+HTTP/1.1 404 Not Found
+Content-Type: application/json
+
+{
+  "detail": "Tenant not found"
+}
+```
+
+---
+
+## 14. Error Handling Patterns
+
+### 14.1 Common Error Responses
 
 #### 400 Bad Request
 
@@ -1630,7 +2361,7 @@ The refresh token is revoked in the database and **cannot be used** to obtain ne
 
 ---
 
-### 11.2 Automatic Error Recovery
+### 14.2 Automatic Error Recovery
 
 #### Token Refresh on 401
 
@@ -1688,9 +2419,9 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
 
 ---
 
-## 12. State Diagrams
+## 15. State Diagrams
 
-### 12.1 User Authentication State
+### 15.1 User Authentication State
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -1728,7 +2459,7 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
                          └──────────────┘
 ```
 
-### 12.2 TOTP State
+### 15.2 TOTP State
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -1763,7 +2494,7 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
                          └──────────────┘
 ```
 
-### 12.3 Token Lifecycle
+### 15.3 Token Lifecycle
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -1814,32 +2545,51 @@ REFRESH TOKEN:
 
 This document covered all workflows in the MCP Auth application:
 
+### Authentication & Token Management
 1. **Tenant Registration** - Auto-create tenant + owner on first login
 2. **Tenant Login** - Authenticate existing tenant
 3. **User Login** - Multi-user authentication (future)
 4. **Token Refresh** - Get new tokens using refresh token
+
+### Security (Two-Factor Authentication)
 5. **TOTP Setup** - Enable two-factor authentication
 6. **TOTP Login** - Login with password + TOTP code
 7. **TOTP Disable** - Turn off two-factor authentication
+
+### Access Control
 8. **Protected Access** - Use access tokens for API calls
 9. **Logout** - Revoke refresh tokens
-10. **Error Handling** - Standard error patterns and recovery
+
+### Tenant Management (with Cascade Updates)
+10. **Tenant Update** - Update tenant_name with automatic cascade to all users
+11. **Tenant Status Update** - Activate/deactivate tenant with cascade to all users
+12. **Tenant Deletion** - Soft delete tenant with cascade to all users
+
+### Error Handling
+13. **Error Handling** - Standard error patterns and automatic recovery
 
 Each workflow includes:
-- Visual flow diagrams
-- Step-by-step implementation details
-- Request/response examples
-- Error scenarios and handling
-- Database state changes
+- Visual flow diagrams with CLIENT → SERVER → DATABASE interactions
+- Step-by-step implementation details with code examples
+- Request/response examples with actual HTTP messages
+- Error scenarios and handling strategies
+- Database state changes (before/after SQL queries)
+- Transaction safety considerations
+
+**✨ New in v0.1.0**: Tenant Management workflows with **automatic cascade updates**:
+- Update tenant → automatically updates all users' denormalized fields
+- Deactivate tenant → automatically deactivates all users (soft delete)
+- Atomic operations with transaction safety (all or nothing)
+- Efficient bulk updates using single SQL UPDATE statements
 
 For more information, see:
-- **USER_MANUAL.md** - User-facing tutorials
-- **SCHEMAS.md** - Database schema documentation
-- **API Documentation** - http://127.0.0.1:8000/docs
+- **USER_MANUAL.md** - User-facing tutorials and API examples
+- **SCHEMAS.md** - Database schema and architecture documentation
+- **API Documentation** - http://127.0.0.1:8000/docs (interactive Swagger UI)
 
 ---
 
-**Last Updated**: January 12, 2026
+**Last Updated**: January 13, 2026
 **Version**: 0.1.0
 **Status**: Production Ready
 
