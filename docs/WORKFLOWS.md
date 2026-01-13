@@ -333,12 +333,12 @@ Content-Type: application/json
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                      TENANT LOGIN WORKFLOW                        │
+│                      TENANT LOGIN WORKFLOW                       │
 └──────────────────────────────────────────────────────────────────┘
 
   CLIENT                          SERVER                      DATABASE
     │                               │                              │
-    ├─[1] POST /auth/login─────────▶                              │
+    ├─[1] POST /auth/login─────────▶                               │
     │   tenant_email                │                              │
     │   password                    │                              │
     │                               │                              │
@@ -473,12 +473,12 @@ Content-Type: application/json
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                      USER LOGIN WORKFLOW (FUTURE)                 │
+│                      USER LOGIN WORKFLOW (FUTURE)                │
 └──────────────────────────────────────────────────────────────────┘
 
   CLIENT                          SERVER                      DATABASE
     │                               │                              │
-    ├─[1] POST /auth/login-user────▶                              │
+    ├─[1] POST /auth/login-user────▶                               │
     │   tenant_email                │                              │
     │   username                    │                              │
     │   password                    │                              │
@@ -575,12 +575,12 @@ Content-Type: application/json
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                    TOKEN REFRESH WORKFLOW                         │
+│                    TOKEN REFRESH WORKFLOW                        │
 └──────────────────────────────────────────────────────────────────┘
 
   CLIENT                          SERVER                      DATABASE
     │                               │                              │
-    ├─[1] POST /auth/refresh───────▶                              │
+    ├─[1] POST /auth/refresh───────▶                               │
     │   refresh_token               │                              │
     │                               │                              │
     │                               ├─[2] Decode JWT──────────────▶│
@@ -772,12 +772,12 @@ New Token: eyJhbGc...XYZ (issued) → Valid for 30 days
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                       TOTP SETUP WORKFLOW                         │
+│                       TOTP SETUP WORKFLOW                        │
 └──────────────────────────────────────────────────────────────────┘
 
   CLIENT                          SERVER                      DATABASE
     │                               │                              │
-    ├─[1] POST /totp/enable────────▶                              │
+    ├─[1] POST /totp/enable────────▶                               │
     │   Authorization: Bearer token │                              │
     │                               │                              │
     │                               ├─[2] Verify access token─────▶│
@@ -816,12 +816,12 @@ New Token: eyJhbGc...XYZ (issued) → Valid for 30 days
     ├─[9] Display QR code───────────│                              │
     │   User scans with app         │                              │
     │                               │                              │
-    ├─[10] POST /totp/verify───────▶                              │
+    ├─[10] POST /totp/verify───────▶                               │
     │   totp_code: "123456"         │                              │
     │                               │                              │
-    │                               ├─[11] Get user──────────────▶│
+    │                               ├─[11] Get user──────────────▶ │
     │                               │                              │
-    │                               ├─[12] Validate TOTP code────▶│
+    │                               ├─[12] Validate TOTP code────▶ │
     │                               │      pyotp.verify()          │
     │                               │                              │
     │                               │   ◆ Code valid?              │
@@ -1009,12 +1009,12 @@ SELECT id, email, totp_secret, is_totp_enabled FROM users WHERE id = 1;
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                      TOTP LOGIN WORKFLOW                          │
+│                      TOTP LOGIN WORKFLOW                         │
 └──────────────────────────────────────────────────────────────────┘
 
   CLIENT                          SERVER                      DATABASE
     │                               │                              │
-    ├─[1] POST /auth/login─────────▶                              │
+    ├─[1] POST /auth/login─────────▶                               │
     │   tenant_email                │                              │
     │   password                    │                              │
     │   totp_code: "123456"         │                              │
@@ -1151,12 +1151,12 @@ if (error.status === 401 && error.detail.includes("TOTP")) {
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                     TOTP DISABLE WORKFLOW                         │
+│                     TOTP DISABLE WORKFLOW                        │
 └──────────────────────────────────────────────────────────────────┘
 
   CLIENT                          SERVER                      DATABASE
     │                               │                              │
-    ├─[1] POST /totp/disable───────▶                              │
+    ├─[1] POST /totp/disable───────▶                               │
     │   Authorization: Bearer token │                              │
     │   totp_code: "123456"         │                              │
     │                               │                              │
@@ -1262,12 +1262,12 @@ SELECT id, email, totp_secret, is_totp_enabled FROM users WHERE id = 1;
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                PROTECTED ENDPOINT ACCESS WORKFLOW                 │
+│                PROTECTED ENDPOINT ACCESS WORKFLOW                │
 └──────────────────────────────────────────────────────────────────┘
 
   CLIENT                          SERVER                      DATABASE
     │                               │                              │
-    ├─[1] GET /api/protected/me────▶                              │
+    ├─[1] GET /api/protected/me────▶                               │
     │   Authorization: Bearer token │                              │
     │                               │                              │
     │                               ├─[2] Extract token───────────▶│
@@ -1437,12 +1437,12 @@ Content-Type: application/json
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│                        LOGOUT WORKFLOW                            │
+│                        LOGOUT WORKFLOW                           │
 └──────────────────────────────────────────────────────────────────┘
 
   CLIENT                          SERVER                      DATABASE
     │                               │                              │
-    ├─[1] POST /auth/logout────────▶                              │
+    ├─[1] POST /auth/logout────────▶                               │
     │   Authorization: Bearer token │                              │
     │                               │                              │
     │                               ├─[2] Verify access token─────▶│
@@ -1463,7 +1463,7 @@ Content-Type: application/json
     │     message: "Logged out"     │                              │
     │   }                           │                              │
     │                               │                              │
-    ├─[7] Delete tokens locally────┤                              │
+    ├─[7] Delete tokens locally──-──┤                              │
     │   delete accessToken          │                              │
     │   delete refreshToken         │                              │
     │                               │                              │
@@ -1694,7 +1694,7 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                   USER AUTHENTICATION STATES                     │
+│                   USER AUTHENTICATION STATES                    │
 └─────────────────────────────────────────────────────────────────┘
 
                          ┌──────────────┐
@@ -1732,7 +1732,7 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         TOTP STATES                              │
+│                         TOTP STATES                             │
 └─────────────────────────────────────────────────────────────────┘
 
                          ┌──────────────┐
@@ -1745,7 +1745,7 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
                          ┌──────────────┐
                          │ TOTP PENDING │
                          │ (secret set, │
-                         │  not verified)│
+                         │ not verified)│
                          └──────┬───────┘
                                 │
                                 │ POST /totp/verify
@@ -1767,7 +1767,7 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      TOKEN LIFECYCLE                             │
+│                      TOKEN LIFECYCLE                            │
 └─────────────────────────────────────────────────────────────────┘
 
 ACCESS TOKEN:
